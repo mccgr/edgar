@@ -43,19 +43,20 @@ get_filing_docs <- function(file_name) {
 
 }
 
-pg <- src_postgres()
-filing_docs <- tbl(pg, sql("SELECT * FROM edgar.filing_docs"))
-face_output <-
-    tbl(pg, sql("SELECT * FROM director_photo.face_output"))
+pg <- dbConnect(PostgreSQL())
+
 filings <- tbl(pg, sql("SELECT * FROM edgar.filings"))
 
 def14_a <-
     filings %>%
     filter(form_type %~% "^10-K")
+if (dbExistsTable(pg, c("edgar", "filing_docs"))) {
+    filing_docs <- tbl(pg, sql("SELECT * FROM edgar.filing_docs"))
+    def14_a <- def14_a %>% anti_join(filing_docs)
+}
 
 file_names <-
     def14_a %>%
-    anti_join(filing_docs) %>%
     select(file_name) %>%
     distinct() %>%
     collect()
