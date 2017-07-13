@@ -49,7 +49,8 @@ filings <- tbl(pg, sql("SELECT * FROM edgar.filings"))
 
 def14_a <-
     filings %>%
-    filter(form_type %~% "^10-K")
+    filter(form_type %~% "^DEF 14")
+
 if (dbExistsTable(pg, c("edgar", "filing_docs"))) {
     filing_docs <- tbl(pg, sql("SELECT * FROM edgar.filing_docs"))
     def14_a <- def14_a %>% anti_join(filing_docs)
