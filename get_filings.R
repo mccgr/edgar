@@ -5,7 +5,7 @@ getSECIndexFile <- function(year, quarter) {
     # Download the zipped index file from the SEC website
     tf <- tempfile()
     result <- try(curl_download(
-        url=paste("http://www.sec.gov/Archives/edgar/full-index/",
+        url=paste("https://www.sec.gov/Archives/edgar/full-index/",
                             year,"/QTR", quarter, "/company.zip",sep=""),
         destfile=tf))
 
