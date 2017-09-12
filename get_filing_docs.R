@@ -14,12 +14,11 @@ get_index_url <- function(file_name) {
 }
 
 get_filing_docs <- function(file_name) {
-    pg <- dbConnect(PostgreSQL())
 
     head_url <- get_index_url(file_name)
 
     table_nodes <-
-        read_html(head_url) %>%
+        read_html(head_url, encoding="Latin1") %>%
         html_nodes("table")
 
     if (length(table_nodes) < 1) {
@@ -36,6 +35,7 @@ get_filing_docs <- function(file_name) {
         colnames(df) <- tolower(colnames(df))
     }
 
+    pg <- dbConnect(PostgreSQL())
     dbWriteTable(pg, c("edgar", "filing_docs"),
                  df, append = TRUE, row.names = FALSE)
     dbDisconnect(pg)
@@ -49,7 +49,7 @@ filings <- tbl(pg, sql("SELECT * FROM edgar.filings"))
 
 def14_a <-
     filings %>%
-    filter(form_type %~% "^DEF 14")
+    filter(form_type %~% "^8-K")
 
 if (dbExistsTable(pg, c("edgar", "filing_docs"))) {
     filing_docs <- tbl(pg, sql("SELECT * FROM edgar.filing_docs"))
@@ -61,6 +61,8 @@ file_names <-
     select(file_name) %>%
     distinct() %>%
     collect()
+dbDisconnect(pg)
 
-system.time(temp <- lapply(file_names$file_name[1:10000], get_filing_docs))
+library(parallel)
+system.time(temp <- lapply(file_names$file_name, get_filing_docs))
 unlist(temp)
