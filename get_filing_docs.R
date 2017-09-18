@@ -63,6 +63,5 @@ file_names <-
     collect()
 dbDisconnect(pg)
 
-library(parallel)
 system.time(temp <- lapply(file_names$file_name, get_filing_docs))
 unlist(temp)
