@@ -50,6 +50,16 @@ addIndexFileToDatabase <- function(data) {
     return(rs)
 }
 
+deleteIndexDataFomDatabase <- function(pg, year, quarter) {
+    if(dbExistsTable(pg, c("edgar", "filings"))) {
+        dbGetQuery(pg, paste(
+            "DELETE
+            FROM edgar.filings
+            WHERE extract(quarter FROM date_filed)=", quarter,
+            " AND extract(year FROM date_filed)=", year))
+    }
+}
+
 # Add data for years 1993 to 2016 ----
 library(RPostgreSQL)
 pg <- dbConnect(PostgreSQL())
@@ -57,14 +67,8 @@ pg <- dbConnect(PostgreSQL())
 
 for (year in 1993:2016) {
     for (quarter in 1:4) {
-        if(dbExistsTable(pg, c("edgar", "filings"))) {
-           dbGetQuery(pg, paste(
-            "DELETE
-             FROM edgar.filings
-             WHERE extract(quarter FROM date_filed)=", quarter,
-           " AND extract(year FROM date_filed)=", year))
-        }
-    addIndexFileToDatabase(getSECIndexFile(year, quarter))
+        deleteIndexDataFomDatabase(pg, year, quarter)
+        addIndexFileToDatabase(getSECIndexFile(year, quarter))
     }
 }
 rs <- dbDisconnect(pg)
@@ -74,14 +78,8 @@ library(RPostgreSQL)
 pg <- dbConnect(PostgreSQL())
 
 for (year in 2017) {
-    for (quarter in 1:2) {
-        if(dbExistsTable(pg, c("edgar", "filings"))) {
-            dbGetQuery(pg, paste(
-                "DELETE
-             FROM edgar.filings
-             WHERE extract(quarter FROM date_filed)=", quarter,
-                " AND extract(year FROM date_filed)=", year))
-        }
+    for (quarter in 3) {
+        deleteIndexDataFomDatabase(pg, year, quarter)
         addIndexFileToDatabase(getSECIndexFile(year, quarter))
     }
 }
