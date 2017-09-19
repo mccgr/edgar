@@ -51,7 +51,9 @@ def14_a <-
     filings %>%
     filter(form_type %~% "^8-K")
 
-if (dbExistsTable(pg, c("edgar", "filing_docs"))) {
+new_table <- !dbExistsTable(pg, c("edgar", "filing_docs"))
+
+if (!new_table) {
     filing_docs <- tbl(pg, sql("SELECT * FROM edgar.filing_docs"))
     def14_a <- def14_a %>% anti_join(filing_docs)
 }
@@ -64,4 +66,11 @@ file_names <-
 dbDisconnect(pg)
 
 system.time(temp <- lapply(file_names$file_name, get_filing_docs))
-unlist(temp)
+
+if (new_table) {
+    pg <- dbConnect(PostgreSQL())
+    dbGetQuery(pg, "CREATE INDEX ON edgar.filing_docs (file_name)")
+    dbDisconnect(pg)
+}
+
+temp <- unlist(temp)
