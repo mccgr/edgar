@@ -16,10 +16,6 @@ get_file_path <- function(file_name, document) {
     file.path(url, document)
 }
 
-get_file_type<-function(document){
-    str_sub(document,-3,-1)
-}
-
 new_table <- !dbExistsTable(pg, c("edgar", "filing_docs_processed"))
 if (!new_table) {
     files <-
