@@ -4,7 +4,7 @@ raw_directory <- Sys.getenv("EDGAR_DIR")
 
 library(RPostgreSQL)
 library(dplyr)
-library(stringr)
+library(tools)
 
 pg <- dbConnect(PostgreSQL())
 
