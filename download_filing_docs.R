@@ -27,7 +27,7 @@ if (!new_table) {
 
 files <-
     files %>%
-    collect(n=140) %>%
+    collect %>%
     filter(file_ext(document)=="htm") %>%
     mutate(html_link = get_file_path(file_name, document))
 
