@@ -48,8 +48,9 @@ get_filing_docs <- function(path) {
     return(file.exists(local_filename))
 }
 
+
 library(parallel)
-files$downloaded <- unlist(mclapply(files$html_link, get_filing_docs, mc.cores=6))
+system.time(files$downloaded <- unlist(mclapply(files$html_link, get_filing_docs, mc.cores=6)))
 
 downloaded_files <-
     files %>%
