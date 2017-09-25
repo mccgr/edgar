@@ -55,11 +55,11 @@ get_filing_docs <- function(path) {
 }
 
 library(parallel)
-while (nrow(files <- get_file_list(num_files = 100))>0) {
+while (nrow(files <- get_file_list(num_files = 200))>0) {
     print("Getting files...")
     st <- system.time(files$downloaded <-
                     unlist(mclapply(files$html_link, get_filing_docs,
-                                    mc.cores=12)))
+                                mc.cores=24)))
 
     print(sprintf("Downloaded %d files in %3.2f seconds",
                   nrow(files), st[["elapsed"]]))
