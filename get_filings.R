@@ -1,3 +1,5 @@
+library(dplyr, warn.conflicts = FALSE)
+
 # Create functions to get filings ----
 getSECIndexFile <- function(year, quarter) {
 
@@ -59,7 +61,7 @@ library(RPostgreSQL)
 pg <- dbConnect(PostgreSQL())
 # dbGetQuery(pg, "DROP TABLE IF EXISTS edgar.filings")
 
-for (year in 1993:2016) {
+for (year in 1993:2017) {
     for (quarter in 1:4) {
         deleteIndexDataFomDatabase(pg, year, quarter)
         addIndexFileToDatabase(getSECIndexFile(year, quarter))
@@ -71,8 +73,8 @@ rs <- dbDisconnect(pg)
 library(RPostgreSQL)
 pg <- dbConnect(PostgreSQL())
 
-for (year in 2017) {
-    for (quarter in 3) {
+for (year in 2018) {
+    for (quarter in 1) {
         deleteIndexDataFomDatabase(pg, year, quarter)
         addIndexFileToDatabase(getSECIndexFile(year, quarter))
     }
