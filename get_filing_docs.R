@@ -49,7 +49,7 @@ filings <- tbl(pg, sql("SELECT * FROM edgar.filings"))
 
 def14_a <-
     filings %>%
-    filter(form_type %~% "^8-K")
+    filter(form_type %~% "^(10-K|DEF 14|8-K)")
 
 new_table <- !dbExistsTable(pg, c("edgar", "filing_docs"))
 
