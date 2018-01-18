@@ -56,7 +56,7 @@ deleteIndexDataFomDatabase <- function(pg, year, quarter) {
     }
 }
 
-# Add data for years 1993 to 2016 ----
+# Add data for years 1993 to 2017 ----
 library(RPostgreSQL)
 pg <- dbConnect(PostgreSQL())
 # dbGetQuery(pg, "DROP TABLE IF EXISTS edgar.filings")
@@ -69,7 +69,7 @@ for (year in 1993:2017) {
 }
 rs <- dbDisconnect(pg)
 
-# Add data for 2017 ----
+# Add data for 2018 ----
 library(RPostgreSQL)
 pg <- dbConnect(PostgreSQL())
 
