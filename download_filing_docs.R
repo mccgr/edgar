@@ -72,7 +72,12 @@ while (nrow(files <- get_file_list(num_files = 200))>0) {
     dbWriteTable(pg, c("edgar", "filing_docs_processed"), downloaded_files,
              append = !new_table,
              row.names = FALSE)
-
+    if (new_table) {
+        dbGetQuery(pg, "CREATE INDEX ON edgar.filing_docs_processed (file_name)")
+        dbGetQuery(pg, "ALTER TABLE edgar.filing_docs_processed OWNER TO edgar")
+        dbGetQuery(pg, "GRANT SELECT ON TABLE edgar.filing_docs_processed TO edgar_access")
+        new_table <- FALSE
+    }
     dbDisconnect(pg)
 }
 
