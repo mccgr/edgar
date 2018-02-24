@@ -70,6 +70,9 @@ system.time(temp <- lapply(file_names$file_name, get_filing_docs))
 if (new_table) {
     pg <- dbConnect(PostgreSQL())
     dbGetQuery(pg, "CREATE INDEX ON edgar.filing_docs (file_name)")
+    dbGetQuery(pg, "ALTER TABLE edgar.filing_docs OWNER TO edgar")
+    dbGetQuery(pg, "GRANT SELECT ON TABLE edgar.filing_docs TO edgar_access")
+
     dbDisconnect(pg)
 }
 

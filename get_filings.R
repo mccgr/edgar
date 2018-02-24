@@ -42,6 +42,10 @@ addIndexFileToDatabase <- function(data) {
 
     rs <- dbWriteTable(pg, c("edgar", "filings"), data,
                                          append=TRUE, row.names=FALSE)
+
+    rs <- dbGetQuery(pg, "ALTER TABLE edgar.filings OWNER TO edgar")
+    rs <- dbGetQuery(pg, "GRANT SELECT ON TABLE edgar.filings TO edgar_access")
+
     dbDisconnect(pg)
     return(rs)
 }
@@ -59,7 +63,6 @@ deleteIndexDataFomDatabase <- function(pg, year, quarter) {
 # Add data for years 1993 to 2017 ----
 library(RPostgreSQL)
 pg <- dbConnect(PostgreSQL())
-# dbGetQuery(pg, "DROP TABLE IF EXISTS edgar.filings")
 
 for (year in 1993:2017) {
     for (quarter in 1:4) {
