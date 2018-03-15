@@ -1,6 +1,6 @@
+# Create functions to get filings ----
 library(dplyr, warn.conflicts = FALSE)
 
-# Create functions to get filings ----
 getSECIndexFile <- function(year, quarter) {
 
     library(curl)
