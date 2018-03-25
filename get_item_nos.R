@@ -2,15 +2,16 @@ library(dplyr)
 library(curl)
 library(RPostgreSQL)
 library(doParallel)
+library(xml2)
 
 pg <- dbConnect(PostgreSQL())
 
 filing_docs  <- tbl(pg, sql("SELECT * FROM edgar.filings"))
-filing_item_nos <- tbl(pg, sql("SELECT * FROM edgar.filing_item_nos"))
+filing_item_nos <- tbl(pg, sql("SELECT * FROM edgar.item_no"))
 
 ## IDENTIFY FILES TO READ
 
-first_read <- !dbExistsTable(pg,c("edgar","filing_item_nos"))
+first_read <- !dbExistsTable(pg,c("edgar","item_no"))
 
 form_types<-c("8-K")
 
@@ -27,38 +28,48 @@ files_to_read <- filing_docs %>%
 
 ## READ IN FILES
 
-t<-tempfile()
-
-extract_items<-function(file)
+extract_items<-function(file_name)
 {
-    file_name <- file$file_name
-    cik <- file$cik
+    t<-tempfile()
+    cik <- gsub('^edgar/data/|/0.*$', '', file_name)
     file_name_sub <- gsub("\\..*","",basename(file_name))
     file_folder <- gsub("-","",file_name_sub)
     download_url <- file.path("https://www.sec.gov/Archives/edgar/data",cik,file_folder,paste0(file_name_sub,".hdr.sgml"))
     download.file(download_url, t, quiet = T)
     text<-data.frame(content = readLines(t)) %>%
         filter(grepl("<ITEMS>",content)) %>%
-        mutate(content = gsub("<ITEMS>","",content))
-    file %>%
-        mutate(item_no = paste(text$content, collapse = " ; ")) %>%
-        select(file_name,item_no)
+        mutate(item_no = gsub("<ITEMS>","",content)) %>%
+        mutate(merge = T) %>%
+        select(merge,item_no) #%>%
+    file.remove(t)
 
+    file<-data.frame(file_name = file_name) %>%
+        mutate(merge = T) %>%
+        left_join(text, by = "merge") %>%
+        select(-merge)
 }
 
 dbDisconnect(pg)
 
-cl<-makeCluster(10)
-registerDoParallel(cl)
-temp_results<-foreach(i=1:nrow(files_to_read), .combine = rbind, .packages = c("dplyr")) %dopar% {
-    extract_items(files_to_read[i,])
-    }
-stopCluster(cl)
+for(k in 1:ceiling(nrow(files_to_read)/1000)){
 
+run_group <-files_to_read[((k-1)*1000+1):(k*1000),]
+
+temp_results <- as.data.frame(do.call(rbind,mclapply(run_group$file_name, extract_items, mc.cores = 15, mc.preschedule = F)))
+
+pg<-dbConnect(PostgreSQL())
+
+new_table <- !dbExistsTable(pg,c("edgar","item_no"))
 
 if (new_table) {
-    pg <- dbConnect(PostgreSQL())
     dbWriteTable(pg, c("edgar","item_no"), temp_results, overwrite = T, row.names = F)
     dbGetQuery(pg, "CREATE INDEX ON edgar.filing_docs (file_name)")
-    dbDisconnect(pg)
+} else {
+    dbWriteTable(pg, c("edgar","item_no"), temp_results, append = T, row.names = F)
 }
+
+dbDisconnect(pg)
+
+print(paste("uploaded batch",k,"of",ceiling(nrow(files_to_read)/1000)))
+}
+
