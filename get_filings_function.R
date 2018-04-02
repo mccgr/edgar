@@ -43,7 +43,10 @@ addIndexFileToDatabase <- function(data) {
     
     rs <- dbGetQuery(pg, "ALTER TABLE edgar.filings OWNER TO edgar")
     rs <- dbGetQuery(pg, "GRANT SELECT ON TABLE edgar.filings TO edgar_access")
-    
+    comment <- 'CREATED USING get_filings_full.R/get_filings_incremental.R IN iangow-public/edgar'
+    db_comment <- paste0("COMMENT ON TABLE edgar.filings IS '",
+                         comment, " ON ", Sys.time() , "'; ")
+    dbGetQuery(pg, db_comment)
     dbDisconnect(pg)
     return(rs)
 }
