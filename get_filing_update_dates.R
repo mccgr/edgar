@@ -95,9 +95,9 @@ if(dim(to_update)[1] > 0) {
 ####
 
 
-# Convert index_last_modified_new to AEST before storing in database, as the SQL database naturally stores dates in local time.
+# Convert index_last_modified_new to AEST (or local timezone) before storing in database, as the SQL database naturally stores dates in local time.
 
-index_last_modified_new$last_modified <- with_tz(index_last_modified_new$last_modified, tz = "Australia/Melbourne")
+index_last_modified_new$last_modified <- with_tz(index_last_modified_new$last_modified, tz = Sys.timezone())
 
 
 # Put/update index_last_modified in database
