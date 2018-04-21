@@ -1,6 +1,10 @@
-# Create functions to get filings ----
+library(rvest)
+library(lubridate)
 library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+library(RPostgreSQL)
 
+# Create functions to get filings ----
 getSECIndexFile <- function(year, quarter) {
 
     library(curl)
@@ -10,7 +14,7 @@ getSECIndexFile <- function(year, quarter) {
     tf <- tempfile(fileext = ".gz")
     result <- try(curl_download(
         url=paste("https://www.sec.gov/Archives/edgar/full-index/",
-                            year,"/QTR", quarter, "/company.gz",sep=""),
+                  year,"/QTR", quarter, "/company.gz",sep=""),
         destfile=tf))
 
     # If we didn't encounter and error downloading the file, parse it
@@ -20,10 +24,10 @@ getSECIndexFile <- function(year, quarter) {
         # Parse the downloaded file and return the extracted data as a data frame
         temp <-
             read_fwf(tf, fwf_cols(company_name = c(1,62),
-                                      form_type = c(63,74),
-                                      cik = c(75,86),
-                                      date_filed = c(87,98),
-                                      file_name = c(99,150)),
+                                  form_type = c(63,74),
+                                  cik = c(75,86),
+                                  date_filed = c(87,98),
+                                  file_name = c(99,150)),
                      col_types = "ccicc", skip=10,
                      locale = locale(encoding = "macintosh")) %>%
             mutate(date_filed = as.Date(date_filed))
@@ -38,14 +42,17 @@ addIndexFileToDatabase <- function(data) {
     library(RPostgreSQL)
     pg <- dbConnect(PostgreSQL())
 
-    rs <- dbGetQuery(pg, "CREATE SCHEMA IF NOT EXISTS edgar")
+    # rs <- dbGetQuery(pg, "CREATE SCHEMA IF NOT EXISTS edgar")
 
     rs <- dbWriteTable(pg, c("edgar", "filings"), data,
-                                         append=TRUE, row.names=FALSE)
+                       append=TRUE, row.names=FALSE)
 
     rs <- dbGetQuery(pg, "ALTER TABLE edgar.filings OWNER TO edgar")
     rs <- dbGetQuery(pg, "GRANT SELECT ON TABLE edgar.filings TO edgar_access")
-
+    comment <- 'CREATED USING get_filings_full.R/get_filings_incremental.R IN iangow-public/edgar'
+    db_comment <- paste0("COMMENT ON TABLE edgar.filings IS '",
+                         comment, " ON ", Sys.time() , "'; ")
+    dbGetQuery(pg, db_comment)
     dbDisconnect(pg)
     return(rs)
 }
@@ -60,119 +67,91 @@ deleteIndexDataFomDatabase <- function(pg, year, quarter) {
     }
 }
 
-# find the last quarter and year from the current database ----
+# Function to delete and then enter updated data for a given year and quarter
+updateData <- function(pg, year, quarter) {
 
-library(RPostgreSQL)
-pg <- dbConnect(PostgreSQL())
-
-filings <- tbl(pg, sql("SELECT * FROM edgar.filings"))
-
-last_quarter <-
-    filings %>%
-    mutate(year = date_part('year', date_filed),
-           quarter = date_part('quarter', date_filed)) %>%
-    filter(year == max(year, na.rm = TRUE)) %>%
-    summarise(year = max(year, na.rm = TRUE),
-              quarter = max(quarter, na.rm = TRUE)) %>%
-    collect()
-
-rs <- dbDisconnect(pg)
-
-# Add data for years 1993 to the last year and quarter of the current database ----
-
-library(RPostgreSQL)
-pg <- dbConnect(PostgreSQL())
-
-for (year in 1993:(last_quarter$year-1)) {
-    for (quarter in 1:4) {
+    try({
         deleteIndexDataFomDatabase(pg, year, quarter)
+        dbExecute(pg, paste0("DELETE FROM index_last_modified WHERE year=", year,
+                                   " AND quarter=", quarter))
         addIndexFileToDatabase(getSECIndexFile(year, quarter))
-    }
+        dbExecute(pg, paste0("INSERT INTO index_last_modified ",
+                                   "SELECT * FROM index_last_modified_new WHERE year=", year,
+                                   " AND quarter=", quarter))
+        return(TRUE)
+        },
+        return(FALSE))
 }
 
-for (quarter in 1:last_quarter$quarter) {
-    deleteIndexDataFomDatabase(pg, last_quarter$year, quarter)
-    addIndexFileToDatabase(getSECIndexFile(last_quarter$year, quarter))
+# Function to last modified data from EDGAR ----
+getLastUpdate <- function(year, quarter) {
+
+    url <- paste0("https://www.sec.gov/Archives/edgar/full-index/",
+                 year, "/QTR", quarter, "/")
+
+    # Scrape the html table from the website for the given year and quarter
+    read_html(url) %>%
+        html_nodes("table") %>%
+        .[[1]] %>%
+        html_table() %>%
+        filter(Name == "company.gz") %>%
+        select(`Last Modified`) %>%
+        mdy_hms(tz = "America/New_York")
 }
 
-rs <- dbDisconnect(pg)
+# Create table with last_modified ----
+now <- now(tz = 'America/New_York')
+current_year <- year(now)
+current_qtr <- quarter(now)
+year <- 1993:current_year
+quarter <- 1:4L
 
+index_last_modified_new <-
+    crossing(year, quarter) %>%
+    filter(year < current_year |
+               (year == current_year & quarter <= current_qtr)) %>%
+    rowwise() %>%
+    mutate(last_modified = getLastUpdate(year, quarter))
 
-# Find the current year and quarter ----
-
-library(lubridate)
-
-current_year <- year(today())
-current_quarter <- quarter(today())
-
-
-
-# Add data up to current year and quarter ----
-
-library(RPostgreSQL)
+# Push results to database ----
 pg <- dbConnect(PostgreSQL())
 
-if(current_year == last_quarter$year) {
+rs <- dbExecute(pg, "SET search_path TO edgar, public")
 
-# If current_year is equal to last_quarter$year, and the current quarter is later than that of the last update to the
-# database, add data from the quarter after the last update up to and including the current quarter
+dbWriteTable(pg, "index_last_modified_new", index_last_modified_new,
+             row.names = FALSE, overwrite = TRUE)
 
+# Compare new data with old to identify needed index files ----
+if (dbExistsTable(pg, c("edgar", "index_last_modified"))) {
+    index_last_modified_new <- tbl(pg, "index_last_modified_new")
+    index_last_modified <- tbl(pg, "index_last_modified")
 
-    if(current_quarter > last_quarter$quarter) {
+    # Use force_tz to ensure the correct times in EDT.
+    # Database stores times in UTC
 
-        for(quarter in (last_quarter$quarter + 1):current_quarter) {
-
-            deleteIndexDataFomDatabase(pg, current_year, quarter)
-            addIndexFileToDatabase(getSECIndexFile(current_year, quarter))
-
-        }
-
-    }
-
-} else if(current_year == last_quarter$year + 1) {
-
-# If the current year is the year after the year of the last update, add data for the remaining quarters of
-# last_quarter$year ...
-
-    for(quarter in (last_quarter$quarter + 1):4) {
-
-        deleteIndexDataFomDatabase(pg, last_quarter$year, quarter)
-        addIndexFileToDatabase(getSECIndexFile(last_quarter$year, quarter))
-
-    }
-
-# then data for the quarters of the current year, up to and including the current quarter
-
-    for (quarter in 1:current_quarter) {
-        deleteIndexDataFomDatabase(pg, current_year, quarter)
-        addIndexFileToDatabase(getSECIndexFile(current_year, quarter))
-    }
-
-
-} else if(current_year > last_quarter$year + 1) {
-
-# finally, if current_year is at least 2 years greater than last_quarter$year, do same as the previous case, but add data
-# for all 4 quarters for each year in between last_quarter$year and current_year (middle for loop)
-
-    for(quarter in (last_quarter$quarter + 1):4) {
-
-        deleteIndexDataFomDatabase(pg, last_quarter$year, quarter)
-        addIndexFileToDatabase(getSECIndexFile(last_quarter$year, quarter))
-
-    }
-
-    for(year in (last_quarter$year + 1):(current_year - 1)) {
-            for (quarter in 1:4) {
-                deleteIndexDataFomDatabase(pg, year, quarter)
-                addIndexFileToDatabase(getSECIndexFile(year, quarter))
-        }
-    }
-
-    for (quarter in 1:current_quarter) {
-        deleteIndexDataFomDatabase(pg, current_year, quarter)
-        addIndexFileToDatabase(getSECIndexFile(current_year, quarter))
-    }
-
+    to_update <-
+        index_last_modified_new %>%
+        left_join(index_last_modified,
+                  by = c("year", "quarter"),
+                  suffix = c("_new", "_old")) %>%
+        filter(is.na(last_modified_old) |
+                   last_modified_new > last_modified_old) %>%
+        collect()
+} else {
+    to_update <-
+        index_last_modified_new %>%
+        collect()
 }
 
-rs <- dbDisconnect(pg)
+#
+# If to_update has a non-trivial number of observations/rows (ie. at least 1), update the data
+#
+if(nrow(to_update) > 0) {
+    to_update <-
+        to_update %>%
+        rowwise() %>%
+        mutate(updated = updateData(pg, year, quarter))
+}
+
+# Put/update index_last_modified in database
+dbDisconnect(pg)
