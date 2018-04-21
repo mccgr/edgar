@@ -153,5 +153,6 @@ if(nrow(to_update) > 0) {
         mutate(updated = updateData(pg, year, quarter))
 }
 
-# Put/update index_last_modified in database
+dbExecute(pg, "DROP TABLE IF EXISTS index_last_modified_new")
+
 dbDisconnect(pg)
