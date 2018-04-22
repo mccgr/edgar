@@ -45,23 +45,21 @@ extract_items <- function(file_name) {
 
     download_url <- get_sgml_url(file_name)
 
-    tryCatch({
-        temp <- read_lines(download_url)
+    temp <- read_lines(download_url)
 
-        items <-
-            tibble(file_name = file_name,
-                   item_no = str_extract(temp, "(?<=^<ITEMS>)(.*)$")) %>%
-            filter(!is.na(item_no))
+    items <-
+        tibble(file_name = file_name,
+               item_no = str_extract(temp, "(?<=^<ITEMS>)(.*)$")) %>%
+        filter(!is.na(item_no))
 
-        file <-
-            tibble(file_name = file_name) %>%
-            left_join(items, by = "file_name")
+    file <-
+        tibble(file_name = file_name) %>%
+        left_join(items, by = "file_name")
 
-        return(file)
-    })
+    return(file)
 }
 
-batch_size <- 1000L
+batch_size <- 100L
 files_remaining <- files_to_read %>% count() %>% pull()
 num_batches <- ceiling(files_remaining/batch_size)
 batch_num <- 0L
@@ -74,12 +72,13 @@ while(files_to_read %>% head() %>% count() %>% pull() > 0) {
         cat("Processing batch", batch_num, "of", num_batches, "... ")
 
         try({
-            temp_list <- mclapply(run_group$file_name, extract_items,
-                                  mc.cores = 20, mc.preschedule = FALSE)
+            temp_list <- mclapply(run_group$file_name, extract_items, mc.cores = 1)
             temp_results <- bind_rows(temp_list)
 
-            dbWriteTable(pg, c("edgar", "item_no"), temp_results,
-                         append = TRUE, row.names = FALSE)
+            if (nrow(temp_results) > 0) {
+                dbWriteTable(pg, c("edgar", "item_no"), temp_results,
+                             append = TRUE, row.names = FALSE)
+            }
         })
     })
     cat(sys_time[["elapsed"]], "seconds\n")
