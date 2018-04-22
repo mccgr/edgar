@@ -163,5 +163,9 @@ dbExecute(pg, "GRANT SELECT ON filings TO edgar_access")
 dbExecute(pg, "ALTER TABLE index_last_modified OWNER TO edgar")
 dbExecute(pg, "GRANT SELECT ON index_last_modified TO edgar_access")
 dbExecute(pg, "DROP TABLE IF EXISTS index_last_modified_new")
+comment <- 'CREATED USING get_filings.R IN iangow-public/edgar'
+db_comment <- paste0("COMMENT ON TABLE filings IS '",
+                     comment, " ON ", Sys.time() , "'")
+dbGetQuery(pg, db_comment)
 
 dbDisconnect(pg)
