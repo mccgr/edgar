@@ -117,7 +117,7 @@ index_last_modified_scraped <-
 # Push results to database ----
 pg <- dbConnect(PostgreSQL())
 
-rs <- dbExecute(pg, "SET search_path TO edgar, public")
+rs <- dbExecute(pg, "SET search_path TO edgar")
 
 dbWriteTable(pg, "index_last_modified_new", index_last_modified_scraped,
              row.names = FALSE, overwrite = TRUE)
@@ -158,6 +158,10 @@ if(nrow(to_update) > 0) {
         mutate(updated = updateData(pg, year, quarter))
 }
 
+dbExecute(pg, "ALTER TABLE filings OWNER TO edgar")
+dbExecute(pg, "GRANT SELECT ON filings TO edgar_access")
+dbExecute(pg, "ALTER TABLE index_last_modified OWNER TO edgar")
+dbExecute(pg, "GRANT SELECT ON index_last_modified TO edgar_access")
 dbExecute(pg, "DROP TABLE IF EXISTS index_last_modified_new")
 
 dbDisconnect(pg)
