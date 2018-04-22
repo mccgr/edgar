@@ -70,6 +70,7 @@ deleteIndexDataFomDatabase <- function(pg, year, quarter) {
 # Function to delete and then enter updated data for a given year and quarter
 updateData <- function(pg, year, quarter) {
 
+    cat("Updating data for ", year, "Q", quarter, "...\n", sep="")
     try({
         deleteIndexDataFomDatabase(pg, year, quarter)
         dbExecute(pg, paste0("DELETE FROM index_last_modified WHERE year=", year,
@@ -106,7 +107,7 @@ current_qtr <- quarter(now)
 year <- 1993:current_year
 quarter <- 1:4L
 
-index_last_modified_new <-
+index_last_modified_scraped <-
     crossing(year, quarter) %>%
     filter(year < current_year |
                (year == current_year & quarter <= current_qtr)) %>%
@@ -118,7 +119,7 @@ pg <- dbConnect(PostgreSQL())
 
 rs <- dbExecute(pg, "SET search_path TO edgar, public")
 
-dbWriteTable(pg, "index_last_modified_new", index_last_modified_new,
+dbWriteTable(pg, "index_last_modified_new", index_last_modified_scraped,
              row.names = FALSE, overwrite = TRUE)
 
 # Compare new data with old to identify needed index files ----
@@ -138,6 +139,11 @@ if (dbExistsTable(pg, c("edgar", "index_last_modified"))) {
                    last_modified_new > last_modified_old) %>%
         collect()
 } else {
+    index_last_modified_scraped %>%
+        mutate(last_modified = as.Date(NA)) %>%
+        dbWriteTable(pg, "index_last_modified_new", .,
+             row.names = FALSE, overwrite = TRUE)
+
     to_update <-
         index_last_modified_new %>%
         collect()
