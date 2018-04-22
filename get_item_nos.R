@@ -6,7 +6,7 @@ library(parallel)
 
 pg <- dbConnect(PostgreSQL())
 
-filing_docs  <- tbl(pg, sql("SELECT * FROM edgar.filings"))
+filings  <- tbl(pg, sql("SELECT * FROM edgar.filings"))
 
 # Identify files to read ----
 
@@ -21,13 +21,13 @@ if (first_read) {
     dbGetQuery(pg, "GRANT SELECT ON edgar.item_no TO edgar_access")
 }
 
-filing_item_nos <- tbl(pg, sql("SELECT * FROM edgar.item_no"))
+item_no <- tbl(pg, sql("SELECT * FROM edgar.item_no"))
 
 files_to_read <-
-    filing_docs %>%
+    filings %>%
     filter(form_type %in% form_types) %>%
     select(file_name) %>%
-    anti_join(filing_item_nos)
+    anti_join(item_no)
 
 # Read in files ----
 # This function was borrowed from get_filer_ciks.R
