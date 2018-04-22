@@ -102,9 +102,9 @@ getLastUpdate <- function(year, quarter) {
 
 # Create table with last_modified ----
 now <- now(tz = 'America/New_York')
-current_year <- year(now)
+current_year <- as.integer(year(now))
 current_qtr <- quarter(now)
-year <- 1993:current_year
+year <- 1993L:current_year
 quarter <- 1:4L
 
 index_last_modified_scraped <-
@@ -140,13 +140,12 @@ if (dbExistsTable(pg, c("edgar", "index_last_modified"))) {
         collect()
 } else {
     index_last_modified_scraped %>%
-        mutate(last_modified = as.Date(NA)) %>%
-        dbWriteTable(pg, "index_last_modified_new", .,
+        mutate(last_modified = as.POSIXct(NA)) %>%
+        dbWriteTable(pg, "index_last_modified", .,
              row.names = FALSE, overwrite = TRUE)
 
     to_update <-
-        index_last_modified_new %>%
-        collect()
+        index_last_modified_scraped
 }
 
 #
