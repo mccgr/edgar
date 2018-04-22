@@ -10,8 +10,8 @@ item_no_desc <-
     read_html("https://www.sec.gov/fast-answers/answersform8khtm.html") %>%
     html_table() %>%
     .[[1]]   %>%
-    select(1, 3) %>%
-    mutate(item_no = `X1`,
+    select(`X1`, `X3`) %>%
+    rename(item_no = `X1`,
            item_desc = `X3`) %>%
     filter(str_detect(item_no, "^Item")) %>%
     mutate(item_no = str_extract(item_no, "(?<=^Item\\s)(.*)$")) %>%
