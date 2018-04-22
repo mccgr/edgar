@@ -17,6 +17,8 @@ form_types <- c("8-K")
 if (first_read) {
     dbGetQuery(pg, "CREATE TABLE edgar.item_no (file_name text, item_no text)")
     dbGetQuery(pg, "CREATE INDEX ON edgar.item_no (file_name)")
+    dbGetQuery(pg, "ALTER TABLE edgar.item_no OWNER TO edgar")
+    dbGetQuery(pg, "GRANT SELECT ON edgar.item_no TO edgar_access")
 }
 
 filing_item_nos <- tbl(pg, sql("SELECT * FROM edgar.item_no"))
@@ -24,8 +26,8 @@ filing_item_nos <- tbl(pg, sql("SELECT * FROM edgar.item_no"))
 files_to_read <-
     filing_docs %>%
     filter(form_type %in% form_types) %>%
-    select(cik, file_name) %>%
-    anti_join(filing_item_nos, by = "file_name")
+    select(file_name) %>%
+    anti_join(filing_item_nos)
 
 # Read in files ----
 # This function was borrowed from get_filer_ciks.R
