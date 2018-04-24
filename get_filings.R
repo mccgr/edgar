@@ -1,3 +1,4 @@
+#!/usr/bin/env Rscript
 library(rvest)
 library(lubridate)
 library(dplyr, warn.conflicts = FALSE)
