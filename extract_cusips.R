@@ -40,7 +40,7 @@ rs <- dbDisconnect(pg)
 parseFile <- function(file_name) {
 
     # Parse the indicated file using a Perl script
-    system(paste("edgar/extract_cusips.pl", file_name),
+    system(paste("extract_cusips.pl", file_name),
            intern = TRUE)
 }
 
