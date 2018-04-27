@@ -41,7 +41,7 @@ parse13d <- function(text) {
 }
 
 getSGMLlocation <- function(path) {
-  ## Convert a file_name from filings.filings to a path to
+  ## Convert a file_name from edgar.filings to a path to
   ## the associated SGML file
   sgml_basename <- basename(gsub(".txt$", ".hdr.sgml", path, perl=TRUE))
   sgml_path <- file.path(dirname(path),
@@ -67,11 +67,11 @@ filings <- dbGetQuery(pg, "
   SET work_mem='1GB';
 
   SELECT *
-  FROM filings.filings
+  FROM edgar.filings
   WHERE form_type IN ('SC 13D', 'SC 13D/A')
     AND file_name NOT IN (
       SELECT file_name
-      FROM filings.filing_details_13d)")
+      FROM edgar.filing_details_13d)")
 dim(filings)
 dbDisconnect(pg)
 removeErrors <- function(a_list) {
@@ -97,12 +97,12 @@ for (i in 0:floor((dim(filings)[1])/batch_rows)) {
     if (!is.null(filing_list) & !is.null(range)) {
       filing_list <- removeErrors(filing_list)
       filing_details <- do.call(rbind, filing_list)
-      rs <- dbWriteTable(pg, c("filings","filing_details_13d"), filing_details,
+      rs <- dbWriteTable(pg, c("edgar","filing_details_13d"), filing_details,
                  append=TRUE, row.names=FALSE)
-      rs <- dbGetQuery(pg, "VACUUM filings.filing_details_13d")
+      rs <- dbGetQuery(pg, "VACUUM edgar.filing_details_13d")
     }
 }
 
 rs <- dbGetQuery(pg, "
-    DELETE FROM filings.filing_details_13d
+    DELETE FROM edgar.filing_details_13d
     WHERE file_name IS NULL;")
