@@ -29,14 +29,6 @@
 ## Bash script to update the Edgar database
 
 ```
-chmod a+x get_filings.R
-chmod a+x get_accession_nos.R
-chmod a+x get_filing_docs.R 
-chmod a+x get_filer_ciks.R 
-chmod a+x get_item_nos.R 
-chmod a+x get_item_no_desc.R 
-chmod a+x get_server_logs.R 
-
 ./get_filings.R
 ./get_accession_nos.R
 ./get_filing_docs.R 
