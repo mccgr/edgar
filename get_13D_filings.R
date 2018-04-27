@@ -18,7 +18,7 @@ file.list <- dbGetQuery(pg, "
 dbDisconnect(pg)
 
 # Load functions to download filings ----
-source("edgar/download_filing_functions.R")
+source("download_filing_functions.R")
 
 # Now, pull text files for each filing ----
 file.list$have_file <- NA
