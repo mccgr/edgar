@@ -1,3 +1,4 @@
+#!/usr/bin/env Rscript
 library(xml2)
 library(stringr)
 library(dplyr, warn.conflicts = FALSE)
