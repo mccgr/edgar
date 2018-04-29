@@ -1,4 +1,3 @@
-Sys.setenv(EDGAR_DIR="/home/shared")
 raw_directory <- Sys.getenv("EDGAR_DIR")
 
 library(RPostgreSQL)
