@@ -2,6 +2,7 @@
 library(dplyr, warn.conflicts = FALSE)
 library(RPostgreSQL)
 library(stringr)
+library(xml2)
 
 pg <- dbConnect(PostgreSQL())
 
