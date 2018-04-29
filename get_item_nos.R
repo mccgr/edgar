@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 library(dplyr, warn.conflicts = FALSE)
-library(RPostgreSQL)
+library(RPostgreSQL, quietly = TRUE)
 library(stringr)
 library(readr)
 library(parallel)
@@ -28,7 +28,7 @@ files_to_read <-
     filings %>%
     filter(form_type %in% form_types) %>%
     select(file_name) %>%
-    anti_join(item_no)
+    anti_join(item_no, by = "file_name")
 
 # Read in files ----
 # This function was borrowed from get_filer_ciks.R
@@ -85,5 +85,5 @@ while(files_to_read %>% head() %>% count() %>% pull() > 0) {
     cat(sys_time[["elapsed"]], "seconds\n")
 }
 
-dbDisconnect(pg)
+rs <- dbDisconnect(pg)
 

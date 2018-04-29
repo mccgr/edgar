@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 library(dplyr, warn.conflicts = FALSE)
-library(RPostgreSQL)
-library(rvest)
+library(RPostgreSQL, quietly = TRUE)
+library(rvest, quietly = TRUE)
 
 get_index_url <- function(file_name) {
     matches <- stringr::str_match(file_name, "/(\\d+)/(\\d{10}-\\d{2}-\\d{6})")
@@ -56,7 +56,7 @@ new_table <- !dbExistsTable(pg, c("edgar", "filing_docs"))
 
 if (!new_table) {
     filing_docs <- tbl(pg, sql("SELECT * FROM edgar.filing_docs"))
-    def14_a <- def14_a %>% anti_join(filing_docs)
+    def14_a <- def14_a %>% anti_join(filing_docs, by = "file_name")
 }
 
 file_names <-
@@ -64,17 +64,17 @@ file_names <-
     select(file_name) %>%
     distinct() %>%
     collect()
-dbDisconnect(pg)
+rs <- dbDisconnect(pg)
 
 system.time(temp <- lapply(file_names$file_name, get_filing_docs))
 
 if (new_table) {
     pg <- dbConnect(PostgreSQL())
-    dbGetQuery(pg, "CREATE INDEX ON edgar.filing_docs (file_name)")
-    dbGetQuery(pg, "ALTER TABLE edgar.filing_docs OWNER TO edgar")
-    dbGetQuery(pg, "GRANT SELECT ON TABLE edgar.filing_docs TO edgar_access")
+    rs <- dbExecute(pg, "CREATE INDEX ON edgar.filing_docs (file_name)")
+    rs <- dbExecute(pg, "ALTER TABLE edgar.filing_docs OWNER TO edgar")
+    rs <- dbExecute(pg, "GRANT SELECT ON TABLE edgar.filing_docs TO edgar_access")
 
-    dbDisconnect(pg)
+    rs <- dbDisconnect(pg)
 }
 
 temp <- unlist(temp)
