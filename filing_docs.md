@@ -1,3 +1,8 @@
+# `filing_docs`
+
+`filing_docs`is a table listing the documents associated with each filing.
+`filing_docs_processed` is a table listing filings examined in updating `filing_docs`. 
+
 For example, for `file_name` value `edgar/data/1527666/0001078782-12-002654.txt`, the documents are listed [here](https://www.sec.gov/Archives/edgar/data/1527666/000107878212002654/0001078782-12-002654-index.htm) and the contents of `filing_docs` is as follows:
 
 ``` r
