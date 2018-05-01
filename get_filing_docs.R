@@ -26,11 +26,7 @@ get_filing_docs <- function(file_name) {
                      size = NA, file_name = file_name)
     } else {
 
-        df <-
-            table_nodes %>%
-            .[[1]] %>%
-            html_table() %>%
-            mutate(file_name = file_name)
+        df <- table_nodes %>% html_table() %>% bind_rows() %>% mutate(file_name = file_name)
 
         colnames(df) <- tolower(colnames(df))
     }
@@ -42,6 +38,8 @@ get_filing_docs <- function(file_name) {
     return(TRUE)
 
 }
+
+
 
 pg <- dbConnect(PostgreSQL())
 
