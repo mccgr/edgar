@@ -1,6 +1,9 @@
+#!/usr/bin/env Rscript
 library(dplyr, warn.conflicts = FALSE)
-library(RPostgreSQL)
+library(RPostgreSQL, quietly = TRUE)
 library(stringr)
+library(xml2)
+library(rvest)
 
 pg <- dbConnect(PostgreSQL())
 
@@ -24,4 +27,4 @@ rs <- dbWriteTable(pg, "item_no_desc", item_no_desc,
 rs <- dbGetQuery(pg, "ALTER TABLE item_no_desc OWNER TO edgar")
 rs <- dbGetQuery(pg, "GRANT SELECT ON item_no_desc TO edgar_access")
 
-dbDisconnect(pg)
+rs <- dbDisconnect(pg)

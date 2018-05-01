@@ -1,7 +1,8 @@
+#!/usr/bin/env Rscript
 library(xml2)
 library(stringr)
 library(dplyr, warn.conflicts = FALSE)
-library(RPostgreSQL)
+library(RPostgreSQL, quietly = TRUE)
 library(parallel)
 
 regex <- "edgar/data/(\\d+)/(\\d{10})-(\\d{2})-(\\d{6}).txt"
@@ -32,10 +33,10 @@ get_filed_by_cik <- function(file_name) {
 }
 
 pg <- dbConnect(PostgreSQL())
-dbGetQuery(pg, "SET search_path TO edgar")
+rs <- dbExecute(pg, "SET search_path TO edgar")
 
 if (!dbExistsTable(pg, "filer_ciks")) {
-    dbExecute(pg, "
+    rs <- dbExecute(pg, "
         CREATE TABLE filer_ciks (file_name text, filer_cik integer);
         CREATE INDEX ON filer_ciks (file_name);
         ALTER TABLE filer_ciks OWNER TO edgar;
@@ -60,8 +61,8 @@ while(length(file_name <- get_file_names()) > 0) {
 
     filer_cik <- unlist(mclapply(file_name, get_filed_by_cik, mc.cores = 10))
 
-    dbWriteTable(pg, name = "filer_ciks", tibble(file_name, filer_cik),
+    rs <- dbWriteTable(pg, name = "filer_ciks", tibble(file_name, filer_cik),
                  append = TRUE, row.names = FALSE)
 }
 
-dbDisconnect(pg)
+rs <- dbDisconnect(pg)

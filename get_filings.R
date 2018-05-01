@@ -1,15 +1,14 @@
 #!/usr/bin/env Rscript
-library(rvest)
-library(lubridate)
+library(lubridate, warn.conflicts = FALSE)
 library(dplyr, warn.conflicts = FALSE)
 library(tidyr)
-library(RPostgreSQL)
+library(RPostgreSQL, quietly = TRUE)
+library(rvest, quietly = TRUE)
+library(curl, warn.conflicts = FALSE)
+library(readr, warn.conflicts = FALSE)
 
 # Create functions to get filings ----
 getSECIndexFile <- function(year, quarter) {
-
-    library(curl)
-    library(readr)
 
     # Download the zipped index file from the SEC website
     tf <- tempfile(fileext = ".gz")
@@ -42,8 +41,6 @@ addIndexFileToDatabase <- function(data) {
     if (is.null(data)) return(NULL)
     library(RPostgreSQL)
     pg <- dbConnect(PostgreSQL())
-
-    # rs <- dbGetQuery(pg, "CREATE SCHEMA IF NOT EXISTS edgar")
 
     rs <- dbWriteTable(pg, c("edgar", "filings"), data,
                        append=TRUE, row.names=FALSE)
@@ -120,7 +117,7 @@ pg <- dbConnect(PostgreSQL())
 
 rs <- dbExecute(pg, "SET search_path TO edgar")
 
-dbWriteTable(pg, "index_last_modified_new", index_last_modified_scraped,
+rs <- dbWriteTable(pg, "index_last_modified_new", index_last_modified_scraped,
              row.names = FALSE, overwrite = TRUE)
 
 # Compare new data with old to identify needed index files ----
@@ -159,14 +156,14 @@ if(nrow(to_update) > 0) {
         mutate(updated = updateData(pg, year, quarter))
 }
 
-dbExecute(pg, "ALTER TABLE filings OWNER TO edgar")
-dbExecute(pg, "GRANT SELECT ON filings TO edgar_access")
-dbExecute(pg, "ALTER TABLE index_last_modified OWNER TO edgar")
-dbExecute(pg, "GRANT SELECT ON index_last_modified TO edgar_access")
-dbExecute(pg, "DROP TABLE IF EXISTS index_last_modified_new")
+rs <- dbExecute(pg, "ALTER TABLE filings OWNER TO edgar")
+rs <- dbExecute(pg, "GRANT SELECT ON filings TO edgar_access")
+rs <- dbExecute(pg, "ALTER TABLE index_last_modified OWNER TO edgar")
+rs <- dbExecute(pg, "GRANT SELECT ON index_last_modified TO edgar_access")
+rs <- dbExecute(pg, "DROP TABLE IF EXISTS index_last_modified_new")
 comment <- 'CREATED USING get_filings.R IN iangow-public/edgar'
 db_comment <- paste0("COMMENT ON TABLE filings IS '",
                      comment, " ON ", Sys.time() , "'")
-dbGetQuery(pg, db_comment)
+rs <- dbExecute(pg, db_comment)
 
-dbDisconnect(pg)
+rs <- dbDisconnect(pg)

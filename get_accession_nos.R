@@ -1,5 +1,6 @@
+#!/usr/bin/env Rscript
 library(dplyr, warn.conflicts = FALSE)
-library(RPostgreSQL)
+library(RPostgreSQL, quietly = TRUE)
 
 pg <- dbConnect(PostgreSQL())
 
@@ -15,7 +16,7 @@ if (dbExistsTable(pg, "accession_numbers")) {
 
     new_filings <-
         filings %>%
-        anti_join(accession_numbers) %>%
+        anti_join(accession_numbers, by = "file_name") %>%
         select(file_name) %>%
         compute()
 
@@ -27,9 +28,9 @@ if (dbExistsTable(pg, "accession_numbers")) {
         compute(name="acc_number_temp",
                 indexes = c("accessionnumber", "file_name"))
 
-    dbGetQuery(pg, "INSERT INTO accession_numbers SELECT * FROM acc_number_temp")
+    rs <- dbExecute(pg, "INSERT INTO accession_numbers SELECT * FROM acc_number_temp")
 
-    dbGetQuery(pg, "DROP TABLE IF EXISTS acc_number_temp")
+    rs <- dbExecute(pg, "DROP TABLE IF EXISTS acc_number_temp")
 } else {
     acc_nos_all <-
         filings %>%
@@ -40,8 +41,8 @@ if (dbExistsTable(pg, "accession_numbers")) {
                     indexes = c("accessionnumber", "file_name"),
                     temporary = FALSE)
 
-    dbGetQuery(pg, "ALTER TABLE accession_numbers OWNER TO edgar")
-    dbGetQuery(pg, "GRANT SELECT ON accession_numbers TO edgar_access")
+    rs <- dbExecute(pg, "ALTER TABLE accession_numbers OWNER TO edgar")
+    rs <- dbExecute(pg, "GRANT SELECT ON accession_numbers TO edgar_access")
 }
 
-dbDisconnect(pg)
+rs <- dbDisconnect(pg)
