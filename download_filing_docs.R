@@ -1,9 +1,8 @@
-raw_directory <- Sys.getenv("EDGAR_DIR")
-
 library(RPostgreSQL)
-library(dplyr)
+library(dplyr, warn.conflicts = FALSE)
 library(tools)
 
+# Functions ----
 get_file_list <- function(num_files = Inf) {
 
     pg <- dbConnect(PostgreSQL())
