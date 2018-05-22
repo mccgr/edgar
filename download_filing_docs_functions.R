@@ -31,13 +31,11 @@ get_file_list <- function(num_files = Inf, filing_subset = NULL) {
     if(is.null(filing_subset) | !('file_name' %in% colnames(filing_subset))) {
     files <-
         files %>%
-        filter(document %~*% "htm$") %>%
         collect(n = num_files) %>%
         mutate(html_link = get_file_path(file_name, document))
     } else {
         files <-
             files %>%
-            filter(document %~*% "htm$") %>%
             collect(n = num_files) %>%
             mutate(html_link = get_file_path(file_name, document)) %>%
             inner_join(filing_subset, by = 'file_name')
