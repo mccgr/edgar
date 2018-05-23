@@ -1,21 +1,26 @@
 library(RPostgreSQL)
 library(dplyr, warn.conflicts = FALSE)
 
-# File to download the subset of 8-K filings related to item number 2.05
+source("download_filing_docs_functions.R")
 
+# File to download the subset of 8-K filings related to item number 2.05
 pg <- dbConnect(PostgreSQL())
 
 rs <- dbExecute(pg, "SET search_path TO edgar")
 item_no <- tbl(pg, "item_no")
-
+filing_docs <- tbl(pg, "filing_docs")
 
 itemno205 <-
     item_no %>%
     filter(item_no == '2.05') %>%
     select(file_name) %>%
-    collect()
+    inner_join(filing_docs) %>%
+    select(file_name, document) %>%
+    collect() %>%
+    mutate(file_path = get_file_path(file_name, document))
 dbDisconnect(pg)
 
-source('download_filing_docs_functions.R')
+itemno205$downloaded <- unlist(mclapply(itemno205$file_path,
+                                        get_filing_docs, mc.cores = 12))
 
-download_filing_docs(max_files = 200, filing_subset = itemno205)
+browse_filing_doc(itemno205$file_path[100])
