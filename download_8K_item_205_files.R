@@ -1,9 +1,14 @@
 library(RPostgreSQL)
 library(dplyr, warn.conflicts = FALSE)
+library(parallel)
 
-source("download_filing_docs_functions.R")
+source(file.path("https://raw.githubusercontent.com",
+                 "iangow-public/edgar/master",
+                 "download_filing_docs_functions.R"))
 
-# File to download the subset of 8-K filings related to item number 2.05
+# Code to download the subset of 8-K filings related to item number 2.05
+
+# Get list of files to download ----
 pg <- dbConnect(PostgreSQL())
 
 rs <- dbExecute(pg, "SET search_path TO edgar")
@@ -20,7 +25,8 @@ itemno205 <-
     mutate(file_path = get_file_path(file_name, document))
 dbDisconnect(pg)
 
+# Download files from list ----
 itemno205$downloaded <- unlist(mclapply(itemno205$file_path,
                                         get_filing_docs, mc.cores = 12))
 
-browse_filing_doc(itemno205$file_path[100])
+# browse_filing_doc(itemno205$file_path[100])
