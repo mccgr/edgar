@@ -48,7 +48,7 @@ getSGMLlocation <- function(path) {
                          gsub("(-|\\.hdr\\.sgml$)", "",
                               sgml_basename, perl=TRUE))
 
-  ftp <- file.path("http://www.sec.gov/Archives", sgml_path, sgml_basename)
+  ftp <- file.path("https://www.sec.gov/Archives", sgml_path, sgml_basename)
   return(ftp)
 }
 
