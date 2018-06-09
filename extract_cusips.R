@@ -1,9 +1,9 @@
 #!/usr/bin/env Rscript
 
 # Get a list of files that need to be processed ----
-
-library("RPostgreSQL")
-pg <- dbConnect(PostgreSQL())
+library(dplyr, warn.conflicts = FALSE)
+library(DBI)
+pg <- dbConnect(RPostgreSQL::PostgreSQL())
 
 if (!dbExistsTable(pg, c("edgar", "cusip_cik"))) {
     dbGetQuery(pg, "
@@ -23,16 +23,14 @@ if (!dbExistsTable(pg, c("edgar", "cusip_cik"))) {
 }
 
 # Note that this assumes that streetevents.calls is up to date.
-file_list <- dbGetQuery(pg, "
-    SET work_mem='2GB';
-
-    SELECT file_name
-    FROM edgar.filings
-    WHERE form_type IN ('SC 13G', 'SC 13G/A', 'SC 13D', 'SC 13D/A')
-    EXCEPT
-    SELECT file_name
-    FROM edgar.cusip_cik
-    ORDER BY file_name")
+dbGetQuery(pg, "SET work_mem='2GB'")
+filings <- tbl(pg, sql("SELECT * FROM edgar.filings"))
+cusip_cik <- tbl(pg, sql("SELECT * FROM edgar.cusip_cik"))
+file_list <-
+    filings %>%
+    filter(form_type %in% c('SC 13G', 'SC 13G/A', 'SC 13D', 'SC 13D/A')) %>%
+    anti_join(cusip_cik, by="file_name") %>%
+    collect()
 
 rs <- dbDisconnect(pg)
 
@@ -40,7 +38,7 @@ rs <- dbDisconnect(pg)
 parseFile <- function(file_name) {
 
     # Parse the indicated file using a Perl script
-    system(paste("extract_cusips.pl", file_name),
+    system(paste("perl extract_cusips.pl", file_name),
            intern = TRUE)
 }
 

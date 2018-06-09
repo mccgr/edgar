@@ -6,10 +6,12 @@ use Env qw($PGDATABASE $PGUSER $PGHOST $EDGAR_DIR);
 
 $path_to_edgar = $EDGAR_DIR ? $EDGAR_DIR : "/Volumes/2TB/data/";
 
+
 # Connect to my database
 $PGDATABASE = $PGDATABASE ? $PGDATABASE : "crsp";
 $PGUSER = $PGUSER ? $PGUSER : "igow";
 $PGHOST= $PGHOST ? $PGHOST : "localhost";
+
 
 $file_name = @ARGV[0];
 
@@ -17,7 +19,7 @@ my $dbh = DBI->connect("dbi:Pg:dbname=$PGDATABASE;host=$PGHOST", "$PGUSER")
 	or die "Cannot connect: " . $DBI::errstr;
 
 # Get the file name
-$full_path = $path_to_edgar . '/' . $file_name ;
+$full_path = $path_to_edgar . $file_name ;
 
 # Skip if there is no file or if the file is over 1MB
 unless (-e $full_path) {
