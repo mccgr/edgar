@@ -73,9 +73,40 @@ filings <- dbGetQuery(pg, "
       SELECT file_name
       FROM edgar.filing_details_13d)")
 dim(filings)
-dbDisconnect(pg)
-removeErrors <- function(a_list) {
-  a_list[unlist(lapply(a_list, function(x) { class(x)!="try-error"}))]
+
+removeErrors <- function(a_list, filings_a_list) {
+
+    library(dplyr)
+    library(RPostgreSQL)
+    pg <- dbConnect(PostgreSQL())
+
+    is_not_error <- unlist(lapply(a_list, function(x) { class(x)!="try-error" & !is.na(x)}))
+    non_error <- a_list[is_not_error]
+    errors <- filings_a_list[!is_not_error, ]
+
+    if(!dbExistsTable(pg, c('edgar', 'filing_details_13d_errors'))) {
+
+        rs <- dbWriteTable(pg, c("edgar","filing_details_13d_errors"), errors, row.names=FALSE
+        )
+        rs <- dbGetQuery(pg, "CREATE INDEX ON edgar.filing_details_13d_errors (file_name)")
+        rs <- dbGetQuery(pg, "ALTER TABLE edgar.filing_details_13d_errors OWNER TO edgar")
+        rs <- dbGetQuery(pg, "GRANT SELECT ON TABLE edgar.filing_details_13d_errors TO edgar_access")
+
+    } else {
+
+        old_errors <- dbGetQuery(pg, "SELECT * FROM edgar.filing_details_13d_errors")
+        new_errors <- errors %>% anti_join(old_errors, by = 'file_name')
+        rs <- dbWriteTable(pg, c("edgar","filing_details_13d_errors"), new_errors, append=TRUE, row.names=FALSE)
+    }
+
+    dbDisconnect(pg)
+
+    if(length(non_error) > 0) {
+        return(non_error)
+    } else {
+        return(NULL)
+    }
+
 }
 
 library(parallel)
@@ -91,18 +122,22 @@ for (i in 0:floor((dim(filings)[1])/batch_rows)) {
       range <- NULL
     }
 
-    filing_list <- mclapply(filings$file_name[range], extract13Ddata,
-                            mc.cores=6)
+    filing_list <- unlist(mclapply(filings$file_name[range], extract13Ddata, mc.cores=6))
 
-    if (!is.null(filing_list) & !is.null(range)) {
-      filing_list <- removeErrors(filing_list)
-      filing_details <- do.call(rbind, filing_list)
-      rs <- dbWriteTable(pg, c("edgar","filing_details_13d"), filing_details,
-                 append=TRUE, row.names=FALSE)
-      rs <- dbGetQuery(pg, "VACUUM edgar.filing_details_13d")
+    if (!is.null(range)) {
+      filing_list <- removeErrors(filing_list, filings[range, ])
+      if(!is.null(filing_list)) {
+          filing_details <- do.call(rbind, filing_list)
+          rs <- dbWriteTable(pg, c("edgar","filing_details_13d"), filing_details,
+                             append=TRUE, row.names=FALSE)
+          rs <- dbGetQuery(pg, "VACUUM edgar.filing_details_13d")
+      }
+
     }
 }
 
 rs <- dbGetQuery(pg, "
     DELETE FROM edgar.filing_details_13d
     WHERE file_name IS NULL;")
+
+dbDisconnect(pg)
