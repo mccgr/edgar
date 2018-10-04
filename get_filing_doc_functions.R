@@ -107,17 +107,18 @@ get_filings_by_type <- function(type_regex) {
 
 process_filings <- function(filings_df) {
 
+    pg <- dbConnect(PostgreSQL())
+    new_table <- !dbExistsTable(pg, c("edgar", "filing_docs"))
 
     system.time(temp <- lapply(filings_df$file_name, get_filing_docs))
 
     if (new_table) {
-        pg <- dbConnect(PostgreSQL())
         rs <- dbExecute(pg, "CREATE INDEX ON edgar.filing_docs (file_name)")
         rs <- dbExecute(pg, "ALTER TABLE edgar.filing_docs OWNER TO edgar")
         rs <- dbExecute(pg, "GRANT SELECT ON TABLE edgar.filing_docs TO edgar_access")
-
-        rs <- dbDisconnect(pg)
     }
+
+    rs <- dbDisconnect(pg)
 
     temp <- unlist(temp)
 
