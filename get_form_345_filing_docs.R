@@ -32,6 +32,7 @@ for(i in 1:num_batches) {
 
     time_taken <- system.time(temp <- process_filings(batch))
     num_success <- num_success + sum(temp)
+    total_time <- total_time + time_taken
 
     if(i %% 50 == 0) {
 
@@ -41,7 +42,7 @@ for(i in 1:num_batches) {
 
     }
 
-    total_time <- total_time + time_taken
+
 
 }
 
