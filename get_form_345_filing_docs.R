@@ -13,10 +13,11 @@ batch_size <- 200
 
 num_batches <- ceiling(num_filings/batch_size)
 total_time <- 0
+num_success <- 0
 
 for(i in 1:num_batches) {
 
-    start <- i * (batch_size - 1) + 1
+    start <- (i - 1) * batch_size + 1
 
     if(i < num_batches) {
 
@@ -30,10 +31,11 @@ for(i in 1:num_batches) {
     }
 
     time_taken <- system.time(temp <- process_filings(batch))
+    num_success <- num_success + sum(temp)
 
     if(i %% 50 == 0) {
 
-        print(paste0("Number of filings processed: ", i * batch_size))
+        print(paste0(num_success, " processed out of ", i * batch_size))
         print("Total time taken: \n")
         print(total_time)
 
