@@ -2,11 +2,11 @@
 library(dplyr, warn.conflicts = FALSE)
 library(RPostgreSQL, quietly = TRUE)
 library(rvest, quietly = TRUE)
-source(get_filing_doc_functions.R)
+source("get_filing_doc_functions.R")
 
 fil345_regex <- "^[345](/A)?$"
 
-fil345 <- get_filings_by_type(def14_a_regex)
+fil345 <- get_filings_by_type(fil345_regex)
 
 num_filings <- dim(fil345)[1]
 batch_size <- 200
@@ -31,7 +31,7 @@ for(i in 1:num_batches) {
 
     time_taken <- system.time(temp <- process_filings(batch))
 
-    if(i %% 1000 == 0) {
+    if(i %% 50 == 0) {
 
         print(paste0("Number of filings processed: ", i * batch_size))
         print("Total time taken: \n")
