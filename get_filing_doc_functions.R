@@ -19,7 +19,7 @@ get_index_url <- function(file_name) {
 get_filing_docs <- function(file_name) {
 
 
-    head_url <- get_index_url(file_name)
+    try({head_url <- get_index_url(file_name)
 
     table_nodes <-
         read_html(head_url, encoding="Latin1") %>%
@@ -40,7 +40,7 @@ get_filing_docs <- function(file_name) {
                  df, append = TRUE, row.names = FALSE)
     dbDisconnect(pg)
 
-    return(TRUE)
+    return(TRUE)}, {return(FALSE)})
 
 
 }
