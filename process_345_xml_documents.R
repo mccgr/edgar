@@ -190,6 +190,144 @@ get_footnotes <- function(xml_root) {
 }
 
 
+get_node_footnotes <- function(node) {
+
+    footnotes <- getNodeSet(node, 'footnoteId')
+
+    if(length(footnotes) != 0) {
+        name <- xmlName(node)
+        footnote_index <- unlist(lapply(footnotes, function (x) {xmlGetAttr(x, 'id')}))
+
+        df <- data.frame(footnote_index, stringsAsFactors = F)
+        df$footnote_variable <- name
+
+        return(df[ , c('footnote_variable', 'footnote_index')])
+
+    } else {
+
+        df <- data.frame(matrix(nrow = 0, ncol = 2))
+        colnames(df) <- c('footnote_variable', 'footnote_index')
+
+        for(nd in xmlChildren(node)) {
+
+            part <- get_node_footnotes(nd)
+
+            df <- bind_rows(df, part)
+
+
+        }
+
+        return(df)
+
+    }
+
+}
+
+
+get_header_footnotes <- function(xml_root) {
+
+    df <- data.frame(matrix(nrow = 0, ncol = 3))
+    colnames(df) <- c('seq', 'footnote_variable', 'footnote_index')
+
+    for(child in xmlChildren(xml_root)){
+
+        name <- xmlName(child)
+
+        if(!(name %in% c('nonDerivativeTable', 'derivativeTable', 'footnotes'))) {
+
+            part <- get_node_footnotes(child)
+            if(dim(part)[1] > 0) {
+
+                part$seq <- NA
+                df <- bind_rows(df, part)
+
+            }
+
+        }
+
+    }
+
+    return(df)
+
+}
+
+
+get_derivativeTable_footnotes <- function(xml_root) {
+
+    derivative_tran_nodes <- getNodeSet(getNodeSet(xml_root, 'derivativeTable')[[1]], 'derivativeTransaction')
+
+    df <- data.frame(matrix(nrow = 0, ncol = 3))
+    colnames(df) <- c('seq', 'footnote_variable', 'footnote_index')
+
+    for(i in 1:length(derivative_tran_nodes)) {
+
+        part <- get_node_footnotes(derivative_tran_nodes[[i]])
+        if(dim(part)[1] > 0) {
+
+            part$seq <- i
+            df <- bind_rows(df, part)
+
+        }
+
+    }
+
+    return(df)
+
+}
+
+
+get_nonDerivativeTable_footnotes <- function(xml_root) {
+
+    nonDerivative_tran_nodes <- getNodeSet(getNodeSet(xml_root, 'nonDerivativeTable')[[1]], 'nonDerivativeTransaction')
+
+    df <- data.frame(matrix(nrow = 0, ncol = 3))
+    colnames(df) <- c('seq', 'footnote_variable', 'footnote_index')
+
+    for(i in 1:length(nonDerivative_tran_nodes)) {
+
+        part <- get_node_footnotes(nonDerivative_tran_nodes[[i]])
+        if(dim(part)[1] > 0) {
+
+            part$seq <- i
+            df <- bind_rows(df, part)
+
+        }
+
+    }
+
+    return(df)
+
+}
+
+
+get_full_footnote_indices <- function(xml_root) {
+
+    full_df <- data.frame(matrix(nrow = 0, ncol = 4))
+    colnames(full_df) <- c('table', 'seq', 'footnote_variable', 'footnote_index')
+
+    header <- get_header_footnotes(xml_root)
+    non_deriv <- get_nonDerivativeTable_footnotes(xml_root)
+    deriv <- get_derivativeTable_footnotes(xml_root)
+
+    # Assign table names in new column 'table' for each part, if they are not trivial
+
+    if(dim(header)[1] > 0) {
+        header$table <- 'header'
+    }
+    if(dim(non_deriv)[1] > 0) {
+        non_deriv$table <- 'table1'
+    }
+    if(dim(deriv)[1] > 0) {
+        deriv$table <- 'table2'
+    }
+
+    full_df <- full_df %>% bind_rows(header) %>% bind_rows(non_deriv) %>% bind_rows(deriv) %>% select(table, seq, footnote_variable, footnote_index)
+
+    return(full_df)
+
+}
+
+
 process_xml_documents <- function(xml_subset) {
 
     pg <- dbConnect(PostgreSQL())
