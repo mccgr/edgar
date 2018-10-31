@@ -15,6 +15,15 @@ xml_url_to_json <- function(url) {
     return(xml_rjson)}, return(NA))
 }
 
+
+get_xml_root <- function(url) {
+
+    try({fileURL <- file.path(url)
+    xml_parse <- xmlParse(getURL(fileURL))
+    xml_root <- xmlRoot(xml_parse)
+    return(xml_root)}, return(NA))
+}
+
 get_filing_document_url <- function(file_name, document) {
     matches <- stringr::str_match(file_name, "/(\\d+)/(\\d{10}-\\d{2}-\\d{6})")
     cik <- matches[2]
@@ -100,6 +109,33 @@ get_info_names_from_node <- function(node) {
 
     return(info_names)
 
+}
+
+get_issuer_details <- function(xml_root) {
+
+    df_issuer <- xmlToDataFrame(getNodeSet(xml_root, 'issuer'))
+
+    return(df_issuer)
+
+}
+
+get_rep_owner_details <- function(xml_root) {
+
+    df_rep_owner_id <- xmlToDataFrame(getNodeSet(getNodeSet(xml_root, 'reportingOwner')[[1]], 'reportingOwnerId'))
+    df_rep_owner_ad <- xmlToDataFrame(getNodeSet(getNodeSet(xml_root, 'reportingOwner')[[1]], 'reportingOwnerAddress'))
+    df_rep_owner_rel <- xmlToDataFrame(getNodeSet(getNodeSet(xml_root, 'reportingOwner')[[1]], 'reportingOwnerRelationship'))
+
+    df_rep_owner <- bind_cols(df_rep_owner_id, bind_cols(df_rep_owner_ad, df_rep_owner_rel))
+
+    return(df_rep_owner)
+
+}
+
+get_signature <- function(xml_root) {
+
+    df <- xmlToDataFrame(getNodeSet(xml_root, 'ownerSignature'))
+
+    return(df)
 }
 
 
