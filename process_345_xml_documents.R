@@ -139,65 +139,244 @@ get_signature <- function(xml_root) {
 }
 
 
-get_header <- function(xml_root) {
+get_variable_value <- function(node, variable_name) {
 
-    schema <- xmlValue(getNodeSet(xml_root, 'schemaVersion')[[1]])
-    doc_type <- xmlValue(getNodeSet(xml_root, 'documentType')[[1]])
-    period <- xmlValue(getNodeSet(xml_root, 'periodOfReport')[[1]])
+    # This is a function for extracting the values from fields which ONLY APPEAR ONCE under a node
+    # Returns the value in the field if it exists, returns NA if the field does not exist
 
-    header <- data.frame(schemaVersion = schema, documentType = doc_type, periodOfReport = period, stringsAsFactors = F)
+    variable_node_list <- getNodeSet(node, variable_name)
+
+    if(length(variable_node_list) == 0) {
+
+        return(NA)
+
+    } else{
+
+        value <- xmlValue(variable_node_list[[1]])
+
+        return(value)
+
+    }
+
+}
+
+
+get_header <- function(xml_root, file_name, document) {
+
+    header <- data.frame(matrix(nrow = 0, ncol = 32))
+    colnames(header) <- c('file_name', 'document', 'schemaVersion', 'documentType', 'periodOfReport', 'dateOfOriginalSubmission', 'noSecuritiesOwned', 'notSubjectToSection16', 'form3HoldingsReported', 'form4TransactionsReported', 'issuerCik', 'issuerName', 'issuerTradingSymbol', 'rptOwnerCik', 'rptOwnerCcc', 'rptOwnerName', 'rptOwnerStreet1', 'rptOwnerStreet2', 'rptOwnerCity', 'rptOwnerState', 'rptOwnerZipCode', 'rptOwnerStateDescription', 'rptOwnerGoodAddress', 'isDirector', 'isOfficer', 'isTenPercentOwner', 'isOther', 'officerTitle', 'otherText', 'remarks', 'signatureName', 'signatureDate')
+
+
+    schema <- get_variable_value(xml_root, 'schemaVersion')
+    doc_type <- get_variable_value(xml_root, 'documentType')
+    period <- get_variable_value(xml_root, 'periodOfReport')
+    date_orig_sub <- get_variable_value(xml_root, 'dateOfOriginalSubmission')
+    no_sec_owned <- get_variable_value(xml_root, 'noSecuritiesOwned')
+    no_sect_16 <- get_variable_value(xml_root, 'notSubjectToSection16')
+    form_3_holdings <- get_variable_value(xml_root, 'form3HoldingsReported')
+    form_4_trans <- get_variable_value(xml_root, 'form4TransactionsReported')
+
+    part_df <- data.frame(schemaVersion = schema, documentType = doc_type, periodOfReport = period, dateOfOriginalSubmission = date_orig_sub, noSecuritiesOwned = no_sec_owned, notSubjectToSection16 = no_sect_16, form3HoldingsReported = form_3_holdings, form4TransactionsReported = form_4_trans, stringsAsFactors = F)
 
     issuer <- get_issuer_details(xml_root)
     rep_owner <- get_rep_owner_details(xml_root)
     signature <- get_signature(xml_root)
 
-    header <- bind_cols(header, issuer)
-    header <- bind_cols(header, rep_owner)
-    header <- bind_cols(header, signature)
+    part_df <- bind_cols(part_df, issuer)
+    part_df <- bind_cols(part_df, rep_owner)
+
+    part_df$remarks <- get_variable_value(xml_root, 'remarks')
+
+    part_df <- bind_cols(part_df, signature)
+
+    header <- bind_rows(header, part_df)
+
+    header$file_name <- file_name
+    header$document <- document
 
     return(header)
 
 }
 
-get_nonDerivative_df <- function(xml_root) {
 
-    nonDerivative_tran_nodes <- getNodeSet(getNodeSet(xml_root, 'nonDerivativeTable')[[1]], 'nonDerivativeTransaction')
+scrape_filing_table <- function(xml_root, table, type) {
 
-    rest <- xmlToDataFrame(nonDerivative_tran_nodes)
-    rest$seq <- rownames(rest)
-    rest <- rest[, c('seq', 'securityTitle', 'transactionDate', 'postTransactionAmounts', 'ownershipNature')]
+    # xml_root: the xml root node
+    # table: an integer of 1 for Table 1 (non-derivative), or 2 for Table 2 (derivative)
+    # type: a string specifying whether an element/row represents a 'Transaction' or a 'Holding'
 
-    df_cod_list <- lapply(1:length(nonDerivative_tran_nodes), function(x) {xmlToDataFrame(getNodeSet(nonDerivative_tran_nodes[[x]], 'transactionCoding'), stringsAsFactors = F)})
-    df_cod <- bind_rows(df_cod_list, .id = "seq")
+    subnode_names <- c('transactionCoding', 'postTransactionAmounts', 'ownershipNature')
 
-    df_amount_list <- lapply(1:length(nonDerivative_tran_nodes), function(x) {xmlToDataFrame(getNodeSet(nonDerivative_tran_nodes[[x]], 'transactionAmounts'), stringsAsFactors = F)})
-    df_amount <- bind_rows(df_amount_list, .id = "seq")
+    if(table == 1) {
 
-    full_df <- rest %>% inner_join(df_cod, by = "seq") %>% inner_join(df_amount, by = "seq")
+        if(type == 'Transaction') {
+
+            nodes <- getNodeSet(getNodeSet(xml_root, 'nonDerivativeTable')[[1]], 'nonDerivativeTransaction')
+
+            rest_cols <- c('seq', 'securityTitle', 'transactionDate', 'deemedExecutionDate', 'transactionTimeliness')
+            df <- data.frame(matrix(nrow = 0, ncol = 5))
+            subnode_names <- c(subnode_names, 'transactionAmounts')
+
+        } else if(type == 'Holding') {
+
+
+            nodes <- getNodeSet(getNodeSet(xml_root, 'nonDerivativeTable')[[1]], 'nonDerivativeHolding')
+
+            rest_cols <- c('seq', 'securityTitle')
+            df <- data.frame(matrix(nrow = 0, ncol = 2))
+
+        } else {
+
+            print("Error: Invalid type entered: enter 'Transaction' or 'Holding' ")
+            df <- data.frame()
+            return(df)
+
+        }
+
+
+    } else if(table == 2) {
+
+        if(type == 'Transaction') {
+
+            nodes <- getNodeSet(getNodeSet(xml_root, 'derivativeTable')[[1]], 'derivativeTransaction')
+
+            rest_cols <- c('seq', 'securityTitle', 'conversionOrExercisePrice', 'transactionDate', 'deemedExecutionDate', 'transactionTimeliness', 'exerciseDate', 'expirationDate')
+            df <- data.frame(matrix(nrow = 0, ncol = 8))
+            subnode_names <- c(subnode_names, 'transactionAmounts')
+
+
+
+        } else if(type == 'Holding') {
+
+
+            nodes <- getNodeSet(getNodeSet(xml_root, 'derivativeTable')[[1]], 'derivativeHolding')
+
+            rest_cols <- c('seq', 'securityTitle', 'conversionOrExercisePrice', 'exerciseDate', 'expirationDate')
+            df <- data.frame(matrix(nrow = 0, ncol = 5))
+
+        } else {
+
+            print("Error: Invalid type entered: enter 'Transaction' or 'Holding' ")
+            df <- data.frame()
+            return(df)
+
+        }
+
+
+        subnode_names <- c(subnode_names, 'underlyingSecurity')
+
+
+
+
+    } else {
+
+
+        print("Error: invalid value for table number entered. Enter 1 for nonDerivative or 2 for derivative")
+        df <- data.frame()
+        return(df)
+
+    }
+
+
+    colnames(df) <- rest_cols
+
+
+    if(length(nodes) > 0) {
+        df <- bind_rows(df, xmlToDataFrame(nodes))
+        df$seq <- rownames(df)
+        df <- df[, rest_cols]
+
+        for(i in 1:length(subnode_names)) {
+
+
+            df_list <- lapply(1:length(nodes), function(x) {xmlToDataFrame(getNodeSet(nodes[[x]], subnode_names[i]), stringsAsFactors = F)})
+            part <- bind_rows(df_list, .id = "seq")
+            df <- df %>% left_join(part, by = "seq")
+
+        }
+
+    }
+
+
+
+    return(df)
+
+
+}
+
+
+
+get_nonDerivative_df <- function(xml_root, file_name, document, form_type) {
+
+
+    full_df <- data.frame(matrix(nrow = 0, ncol = 19))
+    colnames(full_df) <- c('file_name', 'document', 'form_type', 'transactionOrHolding', 'seq', 'securityTitle', 'transactionDate', 'deemedExecutionDate', 'transactionFormType', 'transactionCode',
+                           'equitySwapInvolved', 'transactionTimeliness', 'transactionShares', 'transactionPricePerShare', 'transactionAcquiredDisposedCode', 'sharesOwnedFollowingTransaction',
+                           'valueOwnedFollowingTransaction', 'directOrIndirectOwnership', 'natureOfOwnership')
+
+
+    transaction_df <- scrape_filing_table(xml_root, 1, "Transaction")
+
+    if(dim(transaction_df)[1] > 0) {
+
+        transaction_df$transactionOrHolding <- 'Transaction'
+        full_df <- bind_rows(full_df, transaction_df)
+
+    }
+
+    holding_df <- scrape_filing_table(xml_root, 1, "Holding")
+
+    if(dim(holding_df)[1] > 0) {
+
+        holding_df$transactionOrHolding <- 'Holding'
+        full_df <- bind_rows(full_df, holding_df)
+
+    }
+
+
+    full_df$file_name <- file_name
+    full_df$document <- document
+    full_df$form_type <- form_type
 
     return(full_df)
 
 }
 
 
-get_derivative_df <- function(xml_root) {
+get_derivative_df <- function(xml_root, file_name, document, form_type) {
 
-    derivative_tran_nodes <- getNodeSet(getNodeSet(xml_root, 'derivativeTable')[[1]], 'derivativeTransaction')
-    rest <- xmlToDataFrame(derivative_tran_nodes)
-    rest$seq <- rownames(rest)
-    rest <- rest[, c('seq', 'securityTitle', 'conversionOrExercisePrice', 'transactionDate', 'exerciseDate', 'expirationDate',
-                     'postTransactionAmounts', 'ownershipNature')]
 
-    df_cod_list <- lapply(1:length(derivative_tran_nodes), function(x) {xmlToDataFrame(getNodeSet(derivative_tran_nodes[[x]], 'transactionCoding'), stringsAsFactors = F)})
-    df_cod <- bind_rows(df_cod_list, .id = "seq")
+    full_df <- data.frame(matrix(nrow = 0, ncol = 26))
+    colnames(full_df) <- c('file_name', 'document', 'form_type', 'transactionOrHolding', 'seq', 'securityTitle', 'conversionOrExercisePrice',
+                           'transactionDate', 'deemedExecutionDate', 'transactionFormType', 'transactionCode', 'equitySwapInvolved',
+                           'transactionTimeliness', 'transactionShares', 'transactionTotalValue', 'transactionPricePerShare',
+                           'transactionAcquiredDisposedCode', 'exerciseDate', 'expirationDate', 'underlyingSecurityTitle',
+                           'underlyingSecurityShares', 'underlyingSecurityValue', 'sharesOwnedFollowingTransaction',
+                           'valueOwnedFollowingTransaction', 'directOrIndirectOwnership', 'natureOfOwnership')
 
-    df_amount_list <- lapply(1:length(derivative_tran_nodes), function(x) {xmlToDataFrame(getNodeSet(derivative_tran_nodes[[x]], 'transactionAmounts'), stringsAsFactors = F)})
-    df_amount <- bind_rows(df_amount_list, .id = "seq")
 
-    df_usec_list <- lapply(1:length(derivative_tran_nodes), function(x) {xmlToDataFrame(getNodeSet(derivative_tran_nodes[[x]], 'underlyingSecurity'), stringsAsFactors = F)})
-    df_usec <- bind_rows(df_usec_list, .id = "seq")
+    transaction_df <- scrape_filing_table(xml_root, 2, "Transaction")
 
-    full_df <- rest %>% inner_join(df_cod, by = "seq") %>% inner_join(df_amount, by = "seq") %>% inner_join(df_usec, by = "seq")
+    if(dim(transaction_df)[1] > 0) {
+
+        transaction_df$transactionOrHolding <- 'Transaction'
+        full_df <- bind_rows(full_df, transaction_df)
+
+    }
+
+    holding_df <- scrape_filing_table(xml_root, 2, "Holding")
+
+    if(dim(holding_df)[1] > 0) {
+
+        holding_df$transactionOrHolding <- 'Holding'
+        full_df <- bind_rows(full_df, holding_df)
+
+    }
+
+
+    full_df$file_name <- file_name
+    full_df$document <- document
+    full_df$form_type <- form_type
 
     return(full_df)
 
