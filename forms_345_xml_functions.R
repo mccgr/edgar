@@ -631,13 +631,16 @@ get_derivativeTable_footnotes <- function(xml_root) {
     df <- data.frame(matrix(nrow = 0, ncol = 3))
     colnames(df) <- c('seq', 'footnote_variable', 'footnote_index')
 
-    for(i in 1:length(derivative_tran_nodes)) {
+    if(length(derivative_tran_nodes)) {
+        for(i in 1:length(derivative_tran_nodes)) {
 
-        part <- get_node_footnotes(derivative_tran_nodes[[i]])
-        if(dim(part)[1] > 0) {
+            part <- get_node_footnotes(derivative_tran_nodes[[i]])
+            if(dim(part)[1] > 0) {
 
-            part$seq <- i
-            df <- bind_rows(df, part)
+                part$seq <- i
+                df <- bind_rows(df, part)
+
+            }
 
         }
 
@@ -655,13 +658,16 @@ get_nonDerivativeTable_footnotes <- function(xml_root) {
     df <- data.frame(matrix(nrow = 0, ncol = 3))
     colnames(df) <- c('seq', 'footnote_variable', 'footnote_index')
 
-    for(i in 1:length(nonDerivative_tran_nodes)) {
+    if(length(nonDerivative_tran_nodes)) {
+        for(i in 1:length(nonDerivative_tran_nodes)) {
 
-        part <- get_node_footnotes(nonDerivative_tran_nodes[[i]])
-        if(dim(part)[1] > 0) {
+            part <- get_node_footnotes(nonDerivative_tran_nodes[[i]])
+            if(dim(part)[1] > 0) {
 
-            part$seq <- i
-            df <- bind_rows(df, part)
+                part$seq <- i
+                df <- bind_rows(df, part)
+
+            }
 
         }
 
