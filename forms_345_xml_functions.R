@@ -3,6 +3,7 @@ library(XML)
 library(rjson)
 library(RCurl)
 library(dplyr)
+library(lubridate)
 
 
 xml_url_to_json <- function(url) {
