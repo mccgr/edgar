@@ -279,79 +279,116 @@ get_header <- function(xml_root, file_name, document) {
 }
 
 
-scrape_filing_table <- function(xml_root, table, type) {
+determine_table_entry_type <- function(xml_node) {
 
-    # xml_root: the xml root node
-    # table: an integer of 1 for Table 1 (non-derivative), or 2 for Table 2 (derivative)
-    # type: a string specifying whether an element/row represents a 'Transaction' or a 'Holding'
+    # This function determines if a node in table 1 or 2 corresponds to a Transaction or a Holding
 
-    subnode_names <- c('transactionCoding', 'postTransactionAmounts', 'ownershipNature')
+    node_name <- xmlName(xml_node)
 
-    if(table == 1) {
+    if(grepl('Transaction$', node_name)) {
 
-        if(type == 'Transaction') {
+        return('Transaction')
 
-            nodes <- getNodeSet(getNodeSet(xml_root, 'nonDerivativeTable')[[1]], 'nonDerivativeTransaction')
+    } else if(grepl('Holding$', node_name)) {
 
-            rest_cols <- c('seq', 'securityTitle', 'transactionDate', 'deemedExecutionDate', 'transactionTimeliness')
-            df <- data.frame(matrix(nrow = 0, ncol = 5), stringsAsFactors = F)
-            subnode_names <- c(subnode_names, 'transactionAmounts')
+        return('Holding')
 
-        } else if(type == 'Holding') {
+    } else {
 
+        return(NA)
 
-            nodes <- getNodeSet(getNodeSet(xml_root, 'nonDerivativeTable')[[1]], 'nonDerivativeHolding')
-
-            rest_cols <- c('seq', 'securityTitle')
-            df <- data.frame(matrix(nrow = 0, ncol = 2), stringsAsFactors = F)
-
-        } else {
-
-            print("Error: Invalid type entered: enter 'Transaction' or 'Holding' ")
-            df <- data.frame()
-            return(df)
-
-        }
+    }
 
 
-    } else if(table == 2) {
-
-        if(type == 'Transaction') {
-
-            nodes <- getNodeSet(getNodeSet(xml_root, 'derivativeTable')[[1]], 'derivativeTransaction')
-
-            rest_cols <- c('seq', 'securityTitle', 'conversionOrExercisePrice', 'transactionDate', 'deemedExecutionDate', 'transactionTimeliness', 'exerciseDate', 'expirationDate')
-            df <- data.frame(matrix(nrow = 0, ncol = 8), stringsAsFactors = F)
-            subnode_names <- c(subnode_names, 'transactionAmounts')
+}
 
 
+get_subnode_df <- function(nodes, subnode_name) {
 
-        } else if(type == 'Holding') {
+    df_list <- lapply(1:length(nodes), function(x) {xmlToDataFrame(getNodeSet(nodes[[x]], subnode_name), stringsAsFactors = F)})
 
+    num_row_vec <- unlist(lapply(df_list, nrow))
 
-            nodes <- getNodeSet(getNodeSet(xml_root, 'derivativeTable')[[1]], 'derivativeHolding')
+    if(sum(num_row_vec)) {
 
-            rest_cols <- c('seq', 'securityTitle', 'conversionOrExercisePrice', 'exerciseDate', 'expirationDate')
-            df <- data.frame(matrix(nrow = 0, ncol = 5), stringsAsFactors = F)
+        index <- which(num_row_vec > 0)[1]
 
-        } else {
+        c_names <- colnames(df_list[[index]])
 
-            print("Error: Invalid type entered: enter 'Transaction' or 'Holding' ")
-            df <- data.frame()
-            return(df)
+        na_df <- data.frame(matrix(nrow = 1, ncol = length(c_names)))
+        colnames(na_df) <- c_names
+
+        null_indices <- which(num_row_vec == 0)
+
+        for(i in null_indices) {
+
+            df_list[[i]] <- na_df
 
         }
 
-
-        subnode_names <- c(subnode_names, 'underlyingSecurity')
-
-
+        part <- bind_rows(df_list, .id = "seq")
 
 
     } else {
 
+        part <- data.frame(seq = 1:length(df_list))
+        part$seq <- as.character(part$seq)
 
-        print("Error: invalid value for table number entered. Enter 1 for nonDerivative or 2 for derivative")
+    }
+
+    return(part)
+
+
+}
+
+
+
+
+scrape_filing_table <- function(xml_root, table) {
+
+    # xml_root: the xml root node
+    # table: an integer of 1 for Table 1 (non-derivative), or 2 for Table 2 (derivative)
+
+    subnode_names <- c('transactionCoding', 'postTransactionAmounts', 'ownershipNature', 'transactionAmounts')
+
+    if(table == 1) {
+
+        if(length(non_derivative_table <- getNodeSet(xml_root, 'nonDerivativeTable'))) {
+
+            nodes <- getNodeSet(non_derivative_table[[1]], c('nonDerivativeTransaction', 'nonDerivativeHolding'))
+            num_nodes <- length(nodes)
+
+        } else {
+
+            num_nodes <- 0
+
+        }
+
+            rest_cols <- c('seq', 'transactionOrHolding', 'securityTitle', 'transactionDate', 'deemedExecutionDate', 'transactionTimeliness')
+            df <- data.frame(matrix(nrow = 0, ncol = 6), stringsAsFactors = F)
+
+    } else if(table == 2) {
+
+        if(length(derivative_table <- getNodeSet(xml_root, 'derivativeTable'))) {
+
+            nodes <- getNodeSet(derivative_table[[1]], c('derivativeTransaction', 'derivativeHolding'))
+            num_nodes <- length(nodes)
+
+        } else {
+
+            num_nodes <- 0
+
+        }
+
+        rest_cols <- c('seq', 'transactionOrHolding', 'securityTitle', 'conversionOrExercisePrice', 'transactionDate', 'deemedExecutionDate',
+                       'transactionTimeliness', 'exerciseDate', 'expirationDate')
+        df <- data.frame(matrix(nrow = 0, ncol = 9), stringsAsFactors = F)
+        subnode_names <- c(subnode_names, 'underlyingSecurity')
+
+    } else {
+
+
+        print("Error: invalid value for table number entered. Enter 1 for non-derivative or 2 for derivative")
         df <- data.frame()
         return(df)
 
@@ -360,17 +397,17 @@ scrape_filing_table <- function(xml_root, table, type) {
 
     colnames(df) <- rest_cols
 
+    if(num_nodes > 0) {
 
-    if(length(nodes) > 0) {
         df <- bind_rows(df, xmlToDataFrame(nodes))
         df$seq <- rownames(df)
+        df$transactionOrHolding <- unlist(lapply(nodes, determine_table_entry_type))
         df <- df[, rest_cols]
+
 
         for(i in 1:length(subnode_names)) {
 
-
-            df_list <- lapply(1:length(nodes), function(x) {xmlToDataFrame(getNodeSet(nodes[[x]], subnode_names[i]), stringsAsFactors = F)})
-            part <- bind_rows(df_list, .id = "seq")
+            part <- get_subnode_df(nodes, subnode_names[i])
             df <- df %>% left_join(part, by = "seq")
 
         }
@@ -404,53 +441,42 @@ get_nonDerivative_df <- function(xml_root, file_name, document, form_type) {
                            'valueOwnedFollowingTransaction', 'directOrIndirectOwnership', 'natureOfOwnership')
 
 
-    transaction_df <- scrape_filing_table(xml_root, 1, "Transaction")
+    scraping_df <- scrape_filing_table(xml_root, 1)
 
-    if(dim(transaction_df)[1] > 0) {
+    full_df <- bind_rows(full_df, scraping_df)
 
-        transaction_df$transactionOrHolding <- 'Transaction'
-        full_df <- bind_rows(full_df, transaction_df)
+    if(nrow(full_df)) {
 
-    }
+        full_df$file_name <- file_name
+        full_df$document <- document
+        full_df$form_type <- form_type
 
-    holding_df <- scrape_filing_table(xml_root, 1, "Holding")
+        for(column in colnames(full_df)) {
 
-    if(dim(holding_df)[1] > 0) {
+            full_df[[column]] <- as.character(full_df[[column]])
 
-        holding_df$transactionOrHolding <- 'Holding'
-        full_df <- bind_rows(full_df, holding_df)
-
-    }
+        }
 
 
-    full_df$file_name <- file_name
-    full_df$document <- document
-    full_df$form_type <- form_type
+        full_df$seq <- as.integer(full_df$seq)
+        full_df$equitySwapInvolved <- as.logical(as.integer(full_df$equitySwapInvolved))
 
-    for(column in colnames(full_df)) {
+        numeric_cols <- c('transactionShares', 'transactionPricePerShare', 'sharesOwnedFollowingTransaction',
+                          'valueOwnedFollowingTransaction')
 
-        full_df[[column]] <- as.character(full_df[[column]])
+        for(column in numeric_cols) {
 
-    }
+            full_df[[column]] <- as.numeric(full_df[[column]])
 
+        }
 
-    full_df$seq <- as.integer(full_df$seq)
-    full_df$equitySwapInvolved <- as.logical(as.integer(full_df$equitySwapInvolved))
+        date_cols <- c('transactionDate', 'deemedExecutionDate')
 
-    numeric_cols <- c('transactionShares', 'transactionPricePerShare', 'sharesOwnedFollowingTransaction',
-                      'valueOwnedFollowingTransaction')
+        for(column in date_cols) {
 
-    for(column in numeric_cols) {
+            full_df[[column]] <- ymd(full_df[[column]], quiet = TRUE)
 
-        full_df[[column]] <- as.numeric(full_df[[column]])
-
-    }
-
-    date_cols <- c('transactionDate', 'deemedExecutionDate')
-
-    for(column in date_cols) {
-
-        full_df[[column]] <- ymd(full_df[[column]], quiet = TRUE)
+        }
 
     }
 
@@ -476,55 +502,44 @@ get_derivative_df <- function(xml_root, file_name, document, form_type) {
                            'directOrIndirectOwnership', 'natureOfOwnership')
 
 
-    transaction_df <- scrape_filing_table(xml_root, 2, "Transaction")
+    scraping_df <- scrape_filing_table(xml_root, 2)
 
-    if(dim(transaction_df)[1] > 0) {
+    full_df <- bind_rows(full_df, scraping_df)
 
-        transaction_df$transactionOrHolding <- 'Transaction'
-        full_df <- bind_rows(full_df, transaction_df)
+    if(nrow(full_df)) {
 
-    }
-
-    holding_df <- scrape_filing_table(xml_root, 2, "Holding")
-
-    if(dim(holding_df)[1] > 0) {
-
-        holding_df$transactionOrHolding <- 'Holding'
-        full_df <- bind_rows(full_df, holding_df)
-
-    }
+        full_df$file_name <- file_name
+        full_df$document <- document
+        full_df$form_type <- form_type
 
 
-    full_df$file_name <- file_name
-    full_df$document <- document
-    full_df$form_type <- form_type
+        for(column in colnames(full_df)) {
+
+            full_df[[column]] <- as.character(full_df[[column]])
+
+        }
 
 
-    for(column in colnames(full_df)) {
+        full_df$seq <- as.integer(full_df$seq)
+        full_df$equitySwapInvolved <- as.logical(as.integer(full_df$equitySwapInvolved))
 
-        full_df[[column]] <- as.character(full_df[[column]])
+        numeric_cols <- c('conversionOrExercisePrice', 'transactionShares', 'transactionTotalValue', 'transactionPricePerShare',
+                          'underlyingSecurityShares', 'underlyingSecurityValue', 'sharesOwnedFollowingTransaction',
+                          'valueOwnedFollowingTransaction')
 
-    }
+        for(column in numeric_cols) {
 
+            full_df[[column]] <- as.numeric(full_df[[column]])
 
-    full_df$seq <- as.integer(full_df$seq)
-    full_df$equitySwapInvolved <- as.logical(as.integer(full_df$equitySwapInvolved))
+        }
 
-    numeric_cols <- c('conversionOrExercisePrice', 'transactionShares', 'transactionTotalValue', 'transactionPricePerShare',
-                      'underlyingSecurityShares', 'underlyingSecurityValue', 'sharesOwnedFollowingTransaction',
-                      'valueOwnedFollowingTransaction')
+        date_cols <- c('transactionDate', 'deemedExecutionDate', 'exerciseDate', 'expirationDate')
 
-    for(column in numeric_cols) {
+        for(column in date_cols) {
 
-        full_df[[column]] <- as.numeric(full_df[[column]])
+            full_df[[column]] <- ymd(full_df[[column]], quiet = TRUE)
 
-    }
-
-    date_cols <- c('transactionDate', 'deemedExecutionDate', 'exerciseDate', 'expirationDate')
-
-    for(column in date_cols) {
-
-        full_df[[column]] <- ymd(full_df[[column]], quiet = TRUE)
+        }
 
     }
 
@@ -539,25 +554,43 @@ get_derivative_df <- function(xml_root, file_name, document, form_type) {
 }
 
 
-
 get_footnotes <- function(xml_root, file_name, document) {
 
-    footnotes <- getNodeSet(getNodeSet(xml_root, 'footnotes')[[1]], 'footnote')
-    num_footnotes <- length(footnotes)
+    if(length(footnote_table <- getNodeSet(xml_root, 'footnotes'))) {
+        footnotes <- getNodeSet(footnote_table[[1]], 'footnote')
+        num_footnotes <- length(footnotes)
+
+    } else {
+        #ie. No table, no notes
+        num_footnotes <- 0
+    }
+
 
     f_index <- c()
     f_footnote <- c()
 
-    for(i in 1:num_footnotes) {
+    if(num_footnotes) {
 
-        f_index <- c(f_index, xmlAttrs(footnotes[[i]])[[1]])
-        f_footnote <- c(f_footnote, xmlValue(footnotes[[i]]))
+        for(i in 1:num_footnotes) {
+
+            f_index <- c(f_index, xmlAttrs(footnotes[[i]])[[1]])
+            f_footnote <- c(f_footnote, xmlValue(footnotes[[i]]))
+
+        }
+
+        footnotes_df <- data.frame(file_name = file_name, document = document, index = f_index, footnote = f_footnote, stringsAsFactors = F)
+
+    } else {
+
+        footnotes_df <- data.frame(matrix(nrow = 0, ncol = 4), stringsAsFactors = F)
+        colnames(footnotes_df) <- c('file_name', 'document', 'index', 'footnote')
 
     }
 
-    footnotes_df <- data.frame(file_name = file_name, document = document, index = f_index, footnote = f_footnote, stringsAsFactors = F)
 
     return(footnotes_df)
+
+
 
 }
 
@@ -626,15 +659,25 @@ get_header_footnotes <- function(xml_root) {
 
 get_derivativeTable_footnotes <- function(xml_root) {
 
-    derivative_tran_nodes <- getNodeSet(getNodeSet(xml_root, 'derivativeTable')[[1]], 'derivativeTransaction')
+    if(length(derivative_table <- getNodeSet(xml_root, 'derivativeTable'))) {
+
+        derivative_nodes <- getNodeSet(derivative_table[[1]], c('derivativeTransaction', 'derivativeHolding'))
+        num_nodes <- length(derivative_nodes)
+
+    } else {
+
+        num_nodes <- 0
+
+    }
+
 
     df <- data.frame(matrix(nrow = 0, ncol = 3))
     colnames(df) <- c('seq', 'footnote_variable', 'footnote_index')
 
-    if(length(derivative_tran_nodes)) {
-        for(i in 1:length(derivative_tran_nodes)) {
+    if(num_nodes) {
+        for(i in 1:length(derivative_nodes)) {
 
-            part <- get_node_footnotes(derivative_tran_nodes[[i]])
+            part <- get_node_footnotes(derivative_nodes[[i]])
             if(dim(part)[1] > 0) {
 
                 part$seq <- i
@@ -646,6 +689,7 @@ get_derivativeTable_footnotes <- function(xml_root) {
 
     }
 
+
     return(df)
 
 }
@@ -653,15 +697,24 @@ get_derivativeTable_footnotes <- function(xml_root) {
 
 get_nonDerivativeTable_footnotes <- function(xml_root) {
 
-    nonDerivative_tran_nodes <- getNodeSet(getNodeSet(xml_root, 'nonDerivativeTable')[[1]], 'nonDerivativeTransaction')
+    if(length(non_derivative_table <- getNodeSet(xml_root, 'nonDerivativeTable'))) {
+
+        nonDerivative_nodes <- getNodeSet(non_derivative_table[[1]], c('nonDerivativeTransaction', 'nonDerivativeHolding'))
+        num_nodes <- length(nonDerivative_nodes)
+
+    } else {
+
+        num_nodes <- 0
+
+    }
 
     df <- data.frame(matrix(nrow = 0, ncol = 3))
     colnames(df) <- c('seq', 'footnote_variable', 'footnote_index')
 
-    if(length(nonDerivative_tran_nodes)) {
-        for(i in 1:length(nonDerivative_tran_nodes)) {
+    if(num_nodes) {
+        for(i in 1:length(nonDerivative_nodes)) {
 
-            part <- get_node_footnotes(nonDerivative_tran_nodes[[i]])
+            part <- get_node_footnotes(nonDerivative_nodes[[i]])
             if(dim(part)[1] > 0) {
 
                 part$seq <- i
@@ -689,20 +742,24 @@ get_full_footnote_indices <- function(xml_root, file_name, document) {
 
     # Assign table names in new column 'table' for each part, if they are not trivial
 
-    if(dim(header)[1] > 0) {
+    if(nrow(header)) {
         header$table <- 'header'
     }
-    if(dim(non_deriv)[1] > 0) {
+    if(nrow(non_deriv)) {
         non_deriv$table <- 'table1'
     }
-    if(dim(deriv)[1] > 0) {
+    if(nrow(deriv)) {
         deriv$table <- 'table2'
     }
 
-    full_df <- full_df %>% bind_rows(header) %>% bind_rows(non_deriv) %>% bind_rows(deriv) %>% select(table, seq, footnote_variable, footnote_index)
+    full_df <- full_df %>% bind_rows(header) %>% bind_rows(non_deriv) %>% bind_rows(deriv)
 
-    full_df$file_name <- file_name
-    full_df$document <- document
+    if(nrow(full_df)) {
+
+        full_df$file_name <- file_name
+        full_df$document <- document
+
+    }
 
     full_df <- full_df[, c('file_name', 'document', 'table', 'seq', 'footnote_variable', 'footnote_index')]
 
