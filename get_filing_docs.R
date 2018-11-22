@@ -14,30 +14,35 @@ get_index_url <- function(file_name) {
     return(url)
 }
 
+fix_names <- function(df) {
+    colnames(df) <- tolower(colnames(df))
+    df
+}
+
 get_filing_docs <- function(file_name) {
 
-    head_url <- get_index_url(file_name)
+     head_url <- get_index_url(file_name)
 
-    table_nodes <-
-        read_html(head_url, encoding="Latin1") %>%
-        html_nodes("table")
+     table_nodes <-
+         read_html(head_url, encoding="Latin1") %>%
+         html_nodes("table")
 
-    if (length(table_nodes) < 1) {
-        df <- tibble(seq = NA, description = NA, document = NA, type = NA,
-                     size = NA, file_name = file_name)
-    } else {
+     if (length(table_nodes) < 1) {
+         df <- tibble(seq = NA, description = NA, document = NA, type = NA,
+                      size = NA, file_name = file_name)
+     } else {
 
-        df <- table_nodes %>% html_table() %>% bind_rows() %>% mutate(file_name = file_name)
+         df <-
+             table_nodes %>%
+             html_table() %>%
+             bind_rows() %>%
+             fix_names() %>%
+             mutate(file_name = file_name,
+                    type = as.character(type))
+         df
+     }
 
-        colnames(df) <- tolower(colnames(df))
-    }
-
-    pg <- dbConnect(PostgreSQL())
-    dbWriteTable(pg, c("edgar", "filing_docs"),
-                 df, append = TRUE, row.names = FALSE)
-    dbDisconnect(pg)
-    return(TRUE)
-
+     df
 }
 
 
@@ -48,7 +53,7 @@ filings <- tbl(pg, sql("SELECT * FROM edgar.filings"))
 
 def14_a <-
     filings %>%
-    filter(form_type %~% "^(10-K|DEF 14|8-K)")
+    filter(form_type %~% "^[345](/A)?$")
 
 new_table <- !dbExistsTable(pg, c("edgar", "filing_docs"))
 
@@ -57,14 +62,16 @@ if (!new_table) {
     def14_a <- def14_a %>% anti_join(filing_docs, by = "file_name")
 }
 
-file_names <-
+get_file_names <- function() {
     def14_a %>%
     select(file_name) %>%
     distinct() %>%
-    collect()
+    collect(n = 1000)
+}
 rs <- dbDisconnect(pg)
 
-system.time(temp <- lapply(file_names$file_name, get_filing_docs))
+library(parallel)
+system.time(temp <- bind_rows(mclapply(file_names$file_name[1:100], get_filing_docs)))
 
 if (new_table) {
     pg <- dbConnect(PostgreSQL())
