@@ -15,8 +15,6 @@ get_index_url <- function(file_name) {
     return(url)
 }
 
-
-
 get_filing_docs <- function(file_name) {
 
 
@@ -96,7 +94,6 @@ get_filing_docs_table_nodes <- function(file_name) {
         read_html(head_url, encoding="Latin1") %>%
         html_nodes("table")
 
-
     return(table_nodes)
 
 }
@@ -107,14 +104,11 @@ get_num_tables <- function(file_name) {
     num_tables <- length(table_nodes)
     return(num_tables)
 
-
 }
-
 
 get_filings_by_type <- function(type_regex) {
 # A function which takes as an argument a regular expression which catches filings of one or several types, and returns the file names for the set of filings from edgar.filings filtered by those types for which
 # the documents have not yet been processed into edgar.filing_docs
-
 
     pg <- dbConnect(PostgreSQL())
 
@@ -142,7 +136,6 @@ get_filings_by_type <- function(type_regex) {
 
 }
 
-
 process_filings <- function(filings_df) {
 
     pg <- dbConnect(PostgreSQL())
@@ -157,21 +150,19 @@ process_filings <- function(filings_df) {
     }
 
     rs <- dbDisconnect(pg)
-
     temp <- unlist(temp)
 
     return(temp)
 
-
 }
-
 
 process_filings_alt <- function(filings_df) {
 
     pg <- dbConnect(PostgreSQL())
     new_table <- !dbExistsTable(pg, c("edgar", "filing_docs_alt"))
 
-    system.time(temp <- mclapply(filings_df$file_name, get_filing_docs_alt, mc.cores = 24))
+    system.time(temp <- mclapply(filings_df$file_name,
+                                 get_filing_docs_alt, mc.cores = 24))
 
     if (new_table) {
         rs <- dbExecute(pg, "CREATE INDEX ON edgar.filing_docs_alt (file_name)")
@@ -185,7 +176,5 @@ process_filings_alt <- function(filings_df) {
 
     return(temp)
 
-
 }
-
 
