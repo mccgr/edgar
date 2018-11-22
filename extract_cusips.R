@@ -54,7 +54,7 @@ parseFile <- function(file_name) {
 
 # Apply parsing function to files ----
 library(parallel)
-while(nrows(file_list <- get_filing_list(1000)) > 0) {
+while(nrow(file_list <- get_filing_list(1000)) > 0) {
     system.time({
         res <- unlist(mclapply(file_list$file_name, parseFile, mc.cores=12))
     })
