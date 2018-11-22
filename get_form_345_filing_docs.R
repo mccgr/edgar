@@ -4,7 +4,7 @@ library(RPostgreSQL, quietly = TRUE)
 library(rvest, quietly = TRUE)
 source("get_filing_doc_functions.R")
 
-fil345_regex <- "^[345](/A)?$"
+fil345_regex <- "^(10-K|DEF 14|8-K|6-K|13|[345](/A)?)$"
 
 fil345 <- get_filings_by_type(fil345_regex)
 
