@@ -11,8 +11,8 @@ set_permissions_access <- function(table_name) {
 
     pg <- dbConnect(PostgreSQL())
 
-    dbGetQuery(pg, "ALTER TABLE edgar." + table_name + " OWNER TO edgar")
-    dbGetQuery(pg, "GRANT SELECT ON TABLE edgar." + table_name + " TO edgar_access")
+    dbGetQuery(pg, paste0("ALTER TABLE edgar.", table_name, " OWNER TO edgar"))
+    dbGetQuery(pg, paste0("GRANT SELECT ON TABLE edgar.", table_name, " TO edgar_access"))
 
     dbDisconnect(pg)
 
