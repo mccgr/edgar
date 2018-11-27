@@ -89,14 +89,17 @@ while(batch_size <- nrow(batch <- get_345_xml_docs(num_docs = 100))) {
 
     }
 
-    print("Total time taken: \n")
-    print(total_time)
-    print("Number of full successes: \n")
-    print(num_full_success)
-    print("Number of filings processed: \n")
-    print(total_processed)
 
+    if(total_processed %% 10000 == 0) {
 
+        print("Total time taken: \n")
+        print(total_time)
+        print("Number of full successes: \n")
+        print(num_full_success)
+        print("Number of filings processed: \n")
+        print(total_processed)
+
+    }
 
 
 }
