@@ -7,6 +7,17 @@ library(lubridate)
 library(parallel)
 source('forms_345_xml_functions.R')
 
+set_permissions_access <- function(table_name) {
+
+    pg <- dbConnect(PostgreSQL())
+
+    dbGetQuery(pg, "ALTER TABLE edgar." + table_name + " OWNER TO edgar")
+    dbGetQuery(pg, "GRANT SELECT ON TABLE edgar." + table_name + " TO edgar_access")
+
+    dbDisconnect(pg)
+
+}
+
 
 get_345_xml_docs <- function(num_docs = Inf) {
 
@@ -48,10 +59,13 @@ total_time = 0
 logical_cols <- c('got_xml', 'got_header', 'got_table1', 'got_table2', 'got_footnotes', 'got_footnote_indices', 'got_signatures',
                   'wrote_header', 'wrote_table1', 'wrote_table2', 'wrote_footnotes', 'wrote_footnote_indices', 'wrote_signatures')
 
+
+table_list <- c('forms345_header', 'forms345_table1', 'forms345_table2', 'forms345_footnotes', 'forms345_footnote_indices', 'xml_process_table')
+
 pg <- dbConnect(PostgreSQL())
 
 new_table <- !dbExistsTable(pg, c("edgar", "xml_process_table"))
-while((batch_size <- nrow(batch <- get_345_xml_docs(num_docs = 100))) & total_processed < 10000) {
+while(batch_size <- nrow(batch <- get_345_xml_docs(num_docs = 100))) {
 
 
     time_taken <- system.time(temp <- bind_rows(mclapply(1:batch_size, function(j) {process_345_filing(batch[["file_name"]][j], batch[["document"]][j], batch[["form_type"]][j])}, mc.cores =  24)))
@@ -62,8 +76,15 @@ while((batch_size <- nrow(batch <- get_345_xml_docs(num_docs = 100))) & total_pr
 
     if(new_table) {
 
-        dbGetQuery(pg, "ALTER TABLE edgar.xml_process_table OWNER TO edgar")
-        dbGetQuery(pg, "GRANT SELECT ON TABLE edgar.xml_process_table TO edgar_access")
+        # if xml_process_table is a new table, so are the rest of them. Hence set permissions and access for all tables in table_list
+
+        for(tab_name in table_list) {
+
+            set_permissions_access(tab_name)
+
+        }
+
+
         new_table <- FALSE
 
     }
