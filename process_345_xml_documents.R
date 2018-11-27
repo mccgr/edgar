@@ -19,6 +19,17 @@ set_permissions_access <- function(table_name) {
 }
 
 
+make_table_comment <- function(table, table_comment) {
+
+    pg <- dbConnect(PostgreSQL())
+
+    dbGetQuery(pg, paste0("COMMENT ON TABLE edgar.", table_name, " IS '", table_comment, "'"))
+
+    dbDisconnect(pg)
+
+}
+
+
 get_345_xml_docs <- function(num_docs = Inf) {
 
     pg <- dbConnect(PostgreSQL())
@@ -101,6 +112,15 @@ while(batch_size <- nrow(batch <- get_345_xml_docs(num_docs = 100))) {
 
     }
 
+
+}
+
+
+table_comment <- paste0("Created/Updated by process_345_xml_documents.R on ", as.character(now()))
+
+for(tab_name in table_list) {
+
+    make_table_comment(tab_name, table_comment)
 
 }
 
