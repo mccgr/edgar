@@ -62,15 +62,18 @@ while((batch_size <- nrow(batch <- get_345_xml_docs(num_docs = 100))) & total_pr
 
     if(new_table) {
 
-        dbGetQuery(pg, "ALTER TABLE edgar.filing_docs_processed OWNER TO edgar")
-        dbGetQuery(pg, "GRANT SELECT ON TABLE edgar.filing_docs_processed TO edgar_access")
+        dbGetQuery(pg, "ALTER TABLE edgar.xml_process_table OWNER TO edgar")
+        dbGetQuery(pg, "GRANT SELECT ON TABLE edgar.xml_process_table TO edgar_access")
         new_table <- FALSE
 
     }
 
     print("Total time taken: \n")
     print(total_time)
-
+    print("Number of full successes: \n")
+    print(num_full_success)
+    print("Number of filings processed: \n")
+    print(total_processed)
 
 
 
