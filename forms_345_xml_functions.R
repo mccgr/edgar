@@ -314,7 +314,6 @@ single_node_to_df <- function(node, subnode_name) {
     # This function is designed to get rid of the footnoteId/NA columns when getting the dataframe for a subnode_name
 
     child <- getNodeSet(node, subnode_name)[[1]]
-    df <- xmlToDataFrame(children, stringsAsFactors = F)
 
     proper_names <- names(child)
     proper_names <- proper_names[proper_names != 'footnoteId'] # Get rid of footnotes here
@@ -371,10 +370,16 @@ get_subnode_df <- function(nodes, subnode_name) {
 
 extract_date <- function(string) {
 
-    reg_match <- regexpr('[0-9]{4}[ -/]*[0-9]{1,2}[ -/]*[0-9]{1,2}', string)
+    if(is.na(string)) {
+
+        return(ymd(string, quiet = TRUE))
+
+    } else {reg_match <- regexpr('[0-9]{4}[ -/]*[0-9]{1,2}[ -/]*[0-9]{1,2}', string)
     date <- ymd(regmatches(string, reg_match), quiet = TRUE)
 
     return(date)
+
+    }
 }
 
 
@@ -588,9 +593,11 @@ get_nonDerivative_df <- function(xml_root, file_name, document, form_type) {
 
     }
 
+    full_df <- full_df[, nonDeriv_columns]
+
   }
 
-  full_df <- full_df[, nonDeriv_columns]
+
 
   return(full_df)
 
@@ -654,9 +661,11 @@ get_derivative_df <- function(xml_root, file_name, document, form_type) {
 
     }
 
+    full_df <- full_df[, deriv_columns]
+
   }
 
-  full_df <- full_df[, deriv_columns]
+
 
   return(full_df)
 
