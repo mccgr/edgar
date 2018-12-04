@@ -265,8 +265,7 @@ get_header <- function(xml_root, file_name, document) {
 
     }
 
-    boolean_cols <- c('noSecuritiesOwned', 'notSubjectToSection16', 'form3HoldingsReported', 'form4TransactionsReported',
-                      'rptOwnerGoodAddress', 'isDirector', 'isOfficer', 'isTenPercentOwner', 'isOther')
+    boolean_cols <- c('noSecuritiesOwned', 'notSubjectToSection16', 'form3HoldingsReported', 'form4TransactionsReported')
 
     for(column in boolean_cols) {
 
@@ -314,19 +313,17 @@ single_node_to_df <- function(node, subnode_name) {
 
     # This function is designed to get rid of the footnoteId/NA columns when getting the dataframe for a subnode_name
 
-    children <- getNodeSet(node, subnode_name)
+    child <- getNodeSet(node, subnode_name)[[1]]
     df <- xmlToDataFrame(children, stringsAsFactors = F)
 
-    if(nrow(df)) {
-        proper_cols <- na.omit(colnames(df))
-        proper_cols <- proper_cols[proper_cols != 'footnoteId']
-        df <- df[, proper_cols]
+    proper_names <- names(child)
+    proper_names <- proper_names[proper_names != 'footnoteId'] # Get rid of footnotes here
 
-    } else{
+    sub_names <- lapply(getNodeSet(child, proper_names), xmlName)
+    sub_values <- lapply(getNodeSet(child, proper_names), xmlValue)
 
-        df <- data.frame()
-
-    }
+    df <- data.frame(sub_values, stringsAsFactors = F)
+    colnames(df) <- sub_names
 
     return(df)
 
@@ -372,7 +369,13 @@ get_subnode_df <- function(nodes, subnode_name) {
 
 }
 
+extract_date <- function(string) {
 
+    reg_match <- regexpr('[0-9]{4}[ -/]*[0-9]{1,2}[ -/]*[0-9]{1,2}', string)
+    date <- ymd(regmatches(string, reg_match), quiet = TRUE)
+
+    return(date)
+}
 
 
 scrape_filing_table <- function(xml_root, table) {
@@ -461,6 +464,77 @@ scrape_filing_table <- function(xml_root, table) {
 }
 
 
+get_securities_X0101 <- function(xml_root, table) {
+
+    # xml_root: the xml root node
+    # table: an integer of 1 for Table 1 (non-derivative), or 2 for Table 2 (derivative)
+
+    subnode_names <- c('transactionCoding', 'postTransactionAmounts', 'ownershipNature', 'transactionAmounts')
+
+    if(table == 1) {
+
+        nodes <- getNodeSet(xml_root, 'nonDerivativeSecurity')
+
+        rest_cols <- c('seq', 'securityTitle', 'transactionDate', 'deemedExecutionDate', 'transactionTimeliness')
+        df <- data.frame(matrix(nrow = 0, ncol = 5), stringsAsFactors = F)
+
+    } else if(table == 2) {
+
+        nodes <- getNodeSet(xml_root, 'derivativeSecurity')
+
+        rest_cols <- c('seq', 'securityTitle', 'conversionOrExercisePrice', 'transactionDate', 'deemedExecutionDate',
+                       'transactionTimeliness', 'exerciseDate', 'expirationDate')
+        df <- data.frame(matrix(nrow = 0, ncol = 8), stringsAsFactors = F)
+        subnode_names <- c(subnode_names, 'underlyingSecurity')
+
+    } else {
+
+
+        print("Error: invalid value for table number entered. Enter 1 for non-derivative or 2 for derivative")
+        df <- data.frame()
+        return(df)
+
+    }
+
+
+    colnames(df) <- rest_cols
+
+    if(length(nodes)) {
+
+        df <- bind_rows(df, xmlToDataFrame(nodes))
+        df$seq <- rownames(df)
+        df <- df[, rest_cols]
+
+
+        for(i in 1:length(subnode_names)) {
+
+            part <- get_subnode_df(nodes, subnode_names[i])
+            df <- df %>% left_join(part, by = "seq")
+
+        }
+
+
+        for(column in colnames(df)) {
+
+            df[[column]] <- as.character(df[[column]])
+            is_blank <- grepl("^[ \t\n\r]*$", df[[column]])
+            df[[column]][is_blank] <- NA
+
+        }
+
+    }
+
+
+
+
+
+    return(df)
+
+
+}
+
+
+
 get_nonDerivative_df <- function(xml_root, file_name, document, form_type) {
 
 
@@ -474,7 +548,10 @@ get_nonDerivative_df <- function(xml_root, file_name, document, form_type) {
   colnames(full_df) <- nonDeriv_columns
 
 
-  scraping_df <- scrape_filing_table(xml_root, 1)
+  part <- scrape_filing_table(xml_root, 1)
+  part_old <- get_securities_X0101(xml_root, 1)
+
+  scraping_df <- bind_rows(part, part_old)
 
   if(nrow(scraping_df)) {
 
@@ -507,7 +584,7 @@ get_nonDerivative_df <- function(xml_root, file_name, document, form_type) {
 
     for(column in date_cols) {
 
-      full_df[[column]] <- ymd(full_df[[column]], quiet = TRUE)
+        full_df[[column]] <- do.call("c", lapply(full_df[[column]], extract_date))
 
     }
 
@@ -535,7 +612,10 @@ get_derivative_df <- function(xml_root, file_name, document, form_type) {
   colnames(full_df) <- deriv_columns
 
 
-  scraping_df <- scrape_filing_table(xml_root, 2)
+  part <- scrape_filing_table(xml_root, 2)
+  part_old <- get_securities_X0101(xml_root, 2)
+
+  scraping_df <- bind_rows(part, part_old)
 
   if(nrow(scraping_df)) {
 
@@ -570,7 +650,7 @@ get_derivative_df <- function(xml_root, file_name, document, form_type) {
 
     for(column in date_cols) {
 
-      full_df[[column]] <- ymd(full_df[[column]], quiet = TRUE)
+        full_df[[column]] <- do.call("c", lapply(full_df[[column]], extract_date))
 
     }
 
