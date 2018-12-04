@@ -313,16 +313,25 @@ single_node_to_df <- function(node, subnode_name) {
 
     # This function is designed to get rid of the footnoteId/NA columns when getting the dataframe for a subnode_name
 
-    child <- getNodeSet(node, subnode_name)[[1]]
+    subnode_list <- getNodeSet(node, subnode_name)
 
-    proper_names <- names(child)
-    proper_names <- proper_names[proper_names != 'footnoteId'] # Get rid of footnotes here
+    if(length(subnode_list)) {
+        child <- subnode_list[[1]]
 
-    sub_names <- lapply(getNodeSet(child, proper_names), xmlName)
-    sub_values <- lapply(getNodeSet(child, proper_names), xmlValue)
+        proper_names <- names(child)
+        proper_names <- proper_names[proper_names != 'footnoteId'] # Get rid of footnotes here
 
-    df <- data.frame(sub_values, stringsAsFactors = F)
-    colnames(df) <- sub_names
+        sub_names <- lapply(getNodeSet(child, proper_names), xmlName)
+        sub_values <- lapply(getNodeSet(child, proper_names), xmlValue)
+
+        df <- data.frame(sub_values, stringsAsFactors = F)
+        colnames(df) <- sub_names
+
+    } else {
+
+        df <- data.frame()
+
+    }
 
     return(df)
 
