@@ -188,7 +188,7 @@ get_rep_owner_details_df <- function(xml_root, file_name, document) {
 
         for(column in logical_cols) {
 
-            df_rep_owner[[column]] <- as.logical(as.integer(df_rep_owner[[column]]))
+            df_rep_owner[[column]] <- do.call("c", lapply(df_rep_owner[[column]], string_to_boolean))
 
         }
 
@@ -212,7 +212,7 @@ get_signature_df <- function(xml_root, file_name, document) {
   df$seq <- as.integer(rownames(df))
   df$file_name <- file_name
   df$document <- document
-  df$signatureDate <- ymd(df$signatureDate, quiet = TRUE)
+  df[['signatureDate']] <- do.call("c", lapply(df[['signatureDate']], extract_date))
   df <- df[, sig_cols]
 
   return(df)
@@ -269,7 +269,7 @@ get_header <- function(xml_root, file_name, document) {
 
     for(column in boolean_cols) {
 
-        header[[column]] <- as.logical(as.integer(header[[column]]))
+        header[[column]] <- do.call("c", lapply(header[[column]], string_to_boolean))
 
     }
 
@@ -277,7 +277,7 @@ get_header <- function(xml_root, file_name, document) {
 
     for(column in date_cols) {
 
-        header[[column]] <- ymd(header[[column]], quiet = TRUE)
+        header[[column]] <- do.call("c", lapply(header[[column]], extract_date))
 
     }
 
@@ -477,6 +477,25 @@ scrape_filing_table <- function(xml_root, table) {
 
 }
 
+string_to_boolean <- function(string) {
+
+    # first strip spaces from string
+
+    reduced_string <- gsub("[ \t\n\r]", '', string)
+
+    if(grepl("^[01]$", reduced_string)) {
+
+        return(as.logical(as.integer(reduced_string)))
+
+    } else {
+
+        return(as.logical(reduced_string))
+
+    }
+
+
+}
+
 
 get_securities_X0101 <- function(xml_root, table) {
 
@@ -536,6 +555,8 @@ get_securities_X0101 <- function(xml_root, table) {
 
         }
 
+        df$transactionOrHolding <- ifelse(is.na(df$transactionDate), 'Holding', 'Transaction')
+
     }
 
 
@@ -583,7 +604,7 @@ get_nonDerivative_df <- function(xml_root, file_name, document, form_type) {
 
 
     full_df$seq <- as.integer(full_df$seq)
-    full_df$equitySwapInvolved <- as.logical(as.integer(full_df$equitySwapInvolved))
+    full_df[['equitySwapInvolved']] <- do.call("c", lapply(full_df[['equitySwapInvolved']], string_to_boolean))
 
     numeric_cols <- c('transactionShares', 'transactionPricePerShare', 'sharesOwnedFollowingTransaction',
                       'valueOwnedFollowingTransaction')
@@ -650,7 +671,7 @@ get_derivative_df <- function(xml_root, file_name, document, form_type) {
 
 
     full_df$seq <- as.integer(full_df$seq)
-    full_df$equitySwapInvolved <- as.logical(as.integer(full_df$equitySwapInvolved))
+    full_df[['equitySwapInvolved']] <- do.call("c", lapply(full_df[['equitySwapInvolved']], string_to_boolean))
 
     numeric_cols <- c('conversionOrExercisePrice', 'transactionShares', 'transactionTotalValue', 'transactionPricePerShare',
                       'underlyingSecurityShares', 'underlyingSecurityValue', 'sharesOwnedFollowingTransaction',
