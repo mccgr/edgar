@@ -71,7 +71,7 @@ logical_cols <- c('got_xml', 'got_header', 'got_table1', 'got_table2', 'got_foot
                   'wrote_header', 'wrote_table1', 'wrote_table2', 'wrote_footnotes', 'wrote_footnote_indices', 'wrote_signatures')
 
 
-table_list <- c('forms345_header', 'forms345_table1', 'forms345_table2', 'forms345_footnotes',
+table_list <- c('forms345_header', 'forms345_reporting_owners', 'forms345_table1', 'forms345_table2', 'forms345_footnotes',
                 'forms345_footnote_indices', 'forms345_signatures', 'xml_process_table')
 
 pg <- dbConnect(PostgreSQL())
