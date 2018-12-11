@@ -1026,7 +1026,7 @@ process_345_filing <- function(file_name, document, form_type) {
 
     try({
         if(nrow(rep_own) & got_rep_own) {
-            dbWriteTable(pg, c("edgar", "forms345_reporting_owners"), header, append = TRUE, row.names = FALSE)
+            dbWriteTable(pg, c("edgar", "forms345_reporting_owners"), rep_own, append = TRUE, row.names = FALSE)
         }
         wrote_rep_own <- TRUE}, {wrote_rep_own <- FALSE})
 
