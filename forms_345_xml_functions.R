@@ -321,11 +321,19 @@ single_node_to_df <- function(node, subnode_name) {
         proper_names <- names(child)
         proper_names <- proper_names[proper_names != 'footnoteId'] # Get rid of footnotes here
 
-        sub_names <- lapply(getNodeSet(child, proper_names), xmlName)
-        sub_values <- lapply(getNodeSet(child, proper_names), xmlValue)
+        if(length(proper_names)) {
 
-        df <- data.frame(sub_values, stringsAsFactors = F)
-        colnames(df) <- sub_names
+            sub_names <- lapply(getNodeSet(child, proper_names), xmlName)
+            sub_values <- lapply(getNodeSet(child, proper_names), xmlValue)
+            df <- data.frame(sub_values, stringsAsFactors = F)
+            colnames(df) <- sub_names
+
+        } else {
+
+            df <- data.frame()
+
+        }
+
 
     } else {
 
