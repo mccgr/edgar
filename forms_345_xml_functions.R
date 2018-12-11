@@ -401,6 +401,7 @@ scrape_filing_table <- function(xml_root, table) {
 
     if(table == 1) {
 
+        num_nodes <- 0
         nodes_list <- list()
         if(num_tab <- length(non_derivative_table <- getNodeSet(xml_root, 'nonDerivativeTable'))) {
 
@@ -408,10 +409,6 @@ scrape_filing_table <- function(xml_root, table) {
                 nodes_list[[i]] <- getNodeSet(non_derivative_table[[i]], c('nonDerivativeTransaction', 'nonDerivativeHolding'))
                 num_nodes <- num_nodes + length(nodes_list[[i]])
             }
-
-        } else {
-
-            num_nodes <- 0
 
         }
 
@@ -421,6 +418,7 @@ scrape_filing_table <- function(xml_root, table) {
 
     } else if(table == 2) {
 
+        num_nodes <- 0
         nodes_list <- list()
         if(num_tab <- length(derivative_table <- getNodeSet(xml_root, 'derivativeTable'))) {
 
@@ -428,10 +426,6 @@ scrape_filing_table <- function(xml_root, table) {
                 nodes_list[[i]] <- getNodeSet(derivative_table[[i]], c('derivativeTransaction', 'derivativeHolding'))
                 num_nodes <- num_nodes + length(nodes_list[[i]])
             }
-
-        } else {
-
-            num_nodes <- 0
 
         }
 
@@ -968,11 +962,16 @@ process_345_filing <- function(file_name, document, form_type) {
 
         num_non_derivative_tran <- 0
         num_non_derivative_hold <- 0
-        for(i in 1:num_non_derivative_tables) {
-            num_tran_i <- length(getNodeSet(non_derivative_table[[i]], 'nonDerivativeTransaction'))
-            num_hold_i <- length(getNodeSet(non_derivative_table[[i]], 'nonDerivativeHolding'))
-            num_non_derivative_tran <- num_non_derivative_tran + num_tran_i
-            num_non_derivative_hold <- num_non_derivative_hold + num_hold_i
+
+        if(num_non_derivative_tables) {
+
+            for(i in 1:num_non_derivative_tables) {
+                num_tran_i <- length(getNodeSet(non_derivative_table[[i]], 'nonDerivativeTransaction'))
+                num_hold_i <- length(getNodeSet(non_derivative_table[[i]], 'nonDerivativeHolding'))
+                num_non_derivative_tran <- num_non_derivative_tran + num_tran_i
+                num_non_derivative_hold <- num_non_derivative_hold + num_hold_i
+            }
+
         }
 
         num_non_derivative_sec <- length(getNodeSet(xml_root, 'nonDerivativeSecurity'))
@@ -990,11 +989,15 @@ process_345_filing <- function(file_name, document, form_type) {
 
         num_derivative_tran <- 0
         num_derivative_hold <- 0
-        for(i in 1:num_non_derivative_tables) {
+
+        if(num_derivative_tables) {
+
+            for(i in 1:num_derivative_tables) {
             num_tran_i <- length(getNodeSet(derivative_table[[i]], 'derivativeTransaction'))
             num_hold_i <- length(getNodeSet(derivative_table[[i]], 'derivativeHolding'))
             num_derivative_tran <- num_derivative_tran + num_tran_i
             num_derivative_hold <- num_derivative_hold + num_hold_i
+            }
         }
 
         num_derivative_sec <- length(getNodeSet(xml_root, 'derivativeSecurity'))
