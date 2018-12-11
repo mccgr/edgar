@@ -144,6 +144,26 @@ get_issuer_details <- function(xml_root) {
 
 }
 
+eliminate_trivial_nodes <- function(node_list) {
+
+    new_list <- list()
+    for(node in node_list) {
+
+        sub_names <- names(node)
+
+        if(length(sub_names)) {
+
+            old_len <- length(new_list)
+            new_list[[old_len + 1]] <- node
+
+        }
+
+    }
+
+    return(new_list)
+
+}
+
 
 get_rep_owner_details_df <- function(xml_root, file_name, document) {
 
@@ -161,11 +181,17 @@ get_rep_owner_details_df <- function(xml_root, file_name, document) {
 
         for(node in rep_owner_nodes) {
 
-            df_rep_owner_id <- xmlToDataFrame(getNodeSet(node, 'reportingOwnerId'), stringsAsFactors = FALSE)
-            df_rep_owner_ad <- xmlToDataFrame(getNodeSet(node, 'reportingOwnerAddress'), stringsAsFactors = FALSE)
-            df_rep_owner_rel <- xmlToDataFrame(getNodeSet(node, 'reportingOwnerRelationship'), stringsAsFactors = FALSE)
+            rep_owner_id_nodes <- getNodeSet(node, 'reportingOwnerId')
+            rep_owner_id_nodes <- eliminate_trivial_nodes(rep_owner_id_nodes)
+            df_rep_owner_id <- xmlToDataFrame(rep_owner_id_nodes, stringsAsFactors = FALSE)
+            rep_owner_ad_nodes <- getNodeSet(node, 'reportingOwnerAddress')
+            rep_owner_ad_nodes <- eliminate_trivial_nodes(rep_owner_ad_nodes)
+            df_rep_owner_ad <- xmlToDataFrame(rep_owner_ad_nodes, stringsAsFactors = FALSE)
+            rep_owner_rel_nodes <- getNodeSet(node, 'reportingOwnerRelationship')
+            rep_owner_rel_nodes <- eliminate_trivial_nodes(rep_owner_rel_nodes)
+            df_rep_owner_rel <- xmlToDataFrame(rep_owner_rel_nodes, stringsAsFactors = FALSE)
 
-            part <- bind_cols(df_rep_owner_id, bind_cols(df_rep_owner_ad, df_rep_owner_rel))
+            part <- merge(df_rep_owner_id, merge(df_rep_owner_ad, df_rep_owner_rel))
 
             df_rep_owner <- bind_rows(df_rep_owner, part)
 
@@ -950,141 +976,149 @@ process_345_filing <- function(file_name, document, form_type) {
     pg <- dbConnect(PostgreSQL())
 
     try({
-        xml_root <- get_xml_root(file_name, document)
-        got_xml <- TRUE}, {got_xml <- FALSE})
 
-    try({
-        header <- get_header(xml_root, file_name, document)
-        got_header <- TRUE}, {got_header <- FALSE})
+        try({
+            xml_root <- get_xml_root(file_name, document)
+            got_xml <- TRUE}, {got_xml <- FALSE})
 
-    try({
-        rep_own <- get_rep_owner_details_df(xml_root, file_name, document)
-        got_rep_own <- TRUE}, {got_rep_own <- FALSE})
+        try({
+            header <- get_header(xml_root, file_name, document)
+            got_header <- TRUE}, {got_header <- FALSE})
 
-    try({
-        table1 <- get_nonDerivative_df(xml_root, file_name, document, form_type)
-        got_table1 <- TRUE}, {got_table1 <- FALSE})
+        try({
+            rep_own <- get_rep_owner_details_df(xml_root, file_name, document)
+            got_rep_own <- TRUE}, {got_rep_own <- FALSE})
 
-    try({non_derivative_table <- getNodeSet(xml_root, 'nonDerivativeTable')
-        num_non_derivative_tables <- length(non_derivative_table)
+        try({
+            table1 <- get_nonDerivative_df(xml_root, file_name, document, form_type)
+            got_table1 <- TRUE}, {got_table1 <- FALSE})
 
-        num_non_derivative_tran <- 0
-        num_non_derivative_hold <- 0
+        try({non_derivative_table <- getNodeSet(xml_root, 'nonDerivativeTable')
+            num_non_derivative_tables <- length(non_derivative_table)
 
-        if(num_non_derivative_tables) {
+            num_non_derivative_tran <- 0
+            num_non_derivative_hold <- 0
 
-            for(i in 1:num_non_derivative_tables) {
-                num_tran_i <- length(getNodeSet(non_derivative_table[[i]], 'nonDerivativeTransaction'))
-                num_hold_i <- length(getNodeSet(non_derivative_table[[i]], 'nonDerivativeHolding'))
-                num_non_derivative_tran <- num_non_derivative_tran + num_tran_i
-                num_non_derivative_hold <- num_non_derivative_hold + num_hold_i
+            if(num_non_derivative_tables) {
+
+                for(i in 1:num_non_derivative_tables) {
+                    num_tran_i <- length(getNodeSet(non_derivative_table[[i]], 'nonDerivativeTransaction'))
+                    num_hold_i <- length(getNodeSet(non_derivative_table[[i]], 'nonDerivativeHolding'))
+                    num_non_derivative_tran <- num_non_derivative_tran + num_tran_i
+                    num_non_derivative_hold <- num_non_derivative_hold + num_hold_i
+                }
+
             }
 
-        }
+            num_non_derivative_sec <- length(getNodeSet(xml_root, 'nonDerivativeSecurity'))
 
-        num_non_derivative_sec <- length(getNodeSet(xml_root, 'nonDerivativeSecurity'))
+            total_non_derivative_nodes <- num_non_derivative_tran + num_non_derivative_hold + num_non_derivative_sec
+            }, {num_non_derivative_tables <- NA; num_non_derivative_tran <- NA; num_non_derivative_hold <- NA;
+            num_non_derivative_sec <- NA; total_non_derivative_nodes <- NA})
 
-        total_non_derivative_nodes <- num_non_derivative_tran + num_non_derivative_hold + num_non_derivative_sec
-        }, {num_non_derivative_tables <- NA; num_non_derivative_tran <- NA; num_non_derivative_hold <- NA;
-        num_non_derivative_sec <- NA; total_non_derivative_nodes <- NA})
+        try({
+            table2 <- get_derivative_df(xml_root, file_name, document, form_type)
+            got_table2 <- TRUE}, {got_table2 <- FALSE})
 
-    try({
-        table2 <- get_derivative_df(xml_root, file_name, document, form_type)
-        got_table2 <- TRUE}, {got_table2 <- FALSE})
+        try({derivative_table <- getNodeSet(xml_root, 'derivativeTable')
+            num_derivative_tables <- length(derivative_table)
 
-    try({derivative_table <- getNodeSet(xml_root, 'derivativeTable')
-        num_derivative_tables <- length(derivative_table)
+            num_derivative_tran <- 0
+            num_derivative_hold <- 0
 
-        num_derivative_tran <- 0
-        num_derivative_hold <- 0
+            if(num_derivative_tables) {
 
-        if(num_derivative_tables) {
-
-            for(i in 1:num_derivative_tables) {
-            num_tran_i <- length(getNodeSet(derivative_table[[i]], 'derivativeTransaction'))
-            num_hold_i <- length(getNodeSet(derivative_table[[i]], 'derivativeHolding'))
-            num_derivative_tran <- num_derivative_tran + num_tran_i
-            num_derivative_hold <- num_derivative_hold + num_hold_i
+                for(i in 1:num_derivative_tables) {
+                num_tran_i <- length(getNodeSet(derivative_table[[i]], 'derivativeTransaction'))
+                num_hold_i <- length(getNodeSet(derivative_table[[i]], 'derivativeHolding'))
+                num_derivative_tran <- num_derivative_tran + num_tran_i
+                num_derivative_hold <- num_derivative_hold + num_hold_i
+                }
             }
-        }
 
-        num_derivative_sec <- length(getNodeSet(xml_root, 'derivativeSecurity'))
+            num_derivative_sec <- length(getNodeSet(xml_root, 'derivativeSecurity'))
 
-        total_derivative_nodes <- num_derivative_tran + num_derivative_hold + num_derivative_sec
-        }, {num_derivative_tables <- NA; num_derivative_tran <- NA; num_derivative_hold <- NA;
-        num_derivative_sec <- NA; total_derivative_nodes <- NA})
+            total_derivative_nodes <- num_derivative_tran + num_derivative_hold + num_derivative_sec
+            }, {num_derivative_tables <- NA; num_derivative_tran <- NA; num_derivative_hold <- NA;
+            num_derivative_sec <- NA; total_derivative_nodes <- NA})
 
-    try({
-        footnotes <- get_footnotes(xml_root, file_name, document)
-        got_footnotes <- TRUE}, {got_footnotes <- FALSE})
+        try({
+            footnotes <- get_footnotes(xml_root, file_name, document)
+            got_footnotes <- TRUE}, {got_footnotes <- FALSE})
 
-    try({
-        footnote_indices <- get_full_footnote_indices(xml_root, file_name, document)
-        got_footnote_indices <- TRUE}, {got_footnote_indices <- FALSE})
+        try({
+            footnote_indices <- get_full_footnote_indices(xml_root, file_name, document)
+            got_footnote_indices <- TRUE}, {got_footnote_indices <- FALSE})
 
-    try({
-        signatures <- get_signature_df(xml_root, file_name, document)
-        got_signatures <- TRUE}, {got_signatures <- FALSE})
+        try({
+            signatures <- get_signature_df(xml_root, file_name, document)
+            got_signatures <- TRUE}, {got_signatures <- FALSE})
 
-    try({
-        if(nrow(header) & got_header) {
-            dbWriteTable(pg, c("edgar", "forms345_header"), header, append = TRUE, row.names = FALSE)
-        }
-        wrote_header <- TRUE}, {wrote_header <- FALSE})
+        try({
+            if(nrow(header) & got_header) {
+                dbWriteTable(pg, c("edgar", "forms345_header"), header, append = TRUE, row.names = FALSE)
+            }
+            wrote_header <- TRUE}, {wrote_header <- FALSE})
 
-    try({
-        if(nrow(rep_own) & got_rep_own) {
-            dbWriteTable(pg, c("edgar", "forms345_reporting_owners"), rep_own, append = TRUE, row.names = FALSE)
-        }
-        wrote_rep_own <- TRUE}, {wrote_rep_own <- FALSE})
+        try({
+            if(nrow(rep_own) & got_rep_own) {
+                dbWriteTable(pg, c("edgar", "forms345_reporting_owners"), rep_own, append = TRUE, row.names = FALSE)
+            }
+            wrote_rep_own <- TRUE}, {wrote_rep_own <- FALSE})
 
-    try({
-        if(nrow(table1) & got_table1) {
-            dbWriteTable(pg, c("edgar", "forms345_table1"), table1, append = TRUE, row.names = FALSE)
-        }
-        wrote_table1 <- TRUE}, {wrote_table1 <- FALSE})
+        try({
+            if(nrow(table1) & got_table1) {
+                dbWriteTable(pg, c("edgar", "forms345_table1"), table1, append = TRUE, row.names = FALSE)
+            }
+            wrote_table1 <- TRUE}, {wrote_table1 <- FALSE})
 
-    try({
-        if(nrow(table2) & got_table2) {
-            dbWriteTable(pg, c("edgar", "forms345_table2"), table2, append = TRUE, row.names = FALSE)
-        }
-        wrote_table2 <- TRUE}, {wrote_table2 <- FALSE})
+        try({
+            if(nrow(table2) & got_table2) {
+                dbWriteTable(pg, c("edgar", "forms345_table2"), table2, append = TRUE, row.names = FALSE)
+            }
+            wrote_table2 <- TRUE}, {wrote_table2 <- FALSE})
 
-    try({
-        if(nrow(footnotes) & got_footnotes) {
-            dbWriteTable(pg, c("edgar", "forms345_footnotes"), footnotes, append = TRUE, row.names = FALSE)
-        }
-        wrote_footnotes <- TRUE}, {wrote_footnotes <- FALSE})
+        try({
+            if(nrow(footnotes) & got_footnotes) {
+                dbWriteTable(pg, c("edgar", "forms345_footnotes"), footnotes, append = TRUE, row.names = FALSE)
+            }
+            wrote_footnotes <- TRUE}, {wrote_footnotes <- FALSE})
 
-    try({
-        if(nrow(footnote_indices) & got_footnote_indices){
-            dbWriteTable(pg, c("edgar", "forms345_footnote_indices"), footnote_indices, append = TRUE, row.names = FALSE)
-        }
-        wrote_footnote_indices <- TRUE}, {wrote_footnote_indices <- FALSE})
+        try({
+            if(nrow(footnote_indices) & got_footnote_indices){
+                dbWriteTable(pg, c("edgar", "forms345_footnote_indices"), footnote_indices, append = TRUE, row.names = FALSE)
+            }
+            wrote_footnote_indices <- TRUE}, {wrote_footnote_indices <- FALSE})
 
-    try({
-        if(nrow(signatures) & got_signatures){
-            dbWriteTable(pg, c("edgar", "forms345_signatures"), signatures, append = TRUE, row.names = FALSE)
-        }
-        wrote_signatures <- TRUE}, {wrote_signatures <- FALSE})
+        try({
+            if(nrow(signatures) & got_signatures){
+                dbWriteTable(pg, c("edgar", "forms345_signatures"), signatures, append = TRUE, row.names = FALSE)
+            }
+            wrote_signatures <- TRUE}, {wrote_signatures <- FALSE})
 
 
-    process_df <- data.frame(file_name = file_name, document = document, form_type = form_type, got_xml = got_xml,
-                             got_header = got_header, got_rep_own = got_rep_own, got_table1 = got_table1,
-                             num_non_derivative_tables = num_non_derivative_tables,
-                             num_non_derivative_tran = num_non_derivative_tran, num_non_derivative_hold = num_non_derivative_hold,
-                             num_non_derivative_sec = num_non_derivative_sec, total_non_derivative_nodes = total_non_derivative_nodes,
-                             got_table2 = got_table2, num_derivative_tables = num_derivative_tables,
-                             num_derivative_tran = num_derivative_tran, num_derivative_hold = num_derivative_hold,
-                             num_derivative_sec= num_derivative_sec, total_derivative_nodes = total_derivative_nodes,
-                             got_footnotes = got_footnotes, got_footnote_indices = got_footnote_indices,
-                             got_signatures = got_signatures, wrote_header = wrote_header, wrote_rep_own = wrote_rep_own,
-                             wrote_table1 = wrote_table1, wrote_table2 = wrote_table2, wrote_footnotes = wrote_footnotes,
-                             wrote_footnote_indices = wrote_footnote_indices, wrote_signatures = wrote_signatures,
-                             stringsAsFactors = FALSE)
+        process_df <- data.frame(file_name = file_name, document = document, form_type = form_type, got_xml = got_xml,
+                                 got_header = got_header, got_rep_own = got_rep_own, got_table1 = got_table1,
+                                 num_non_derivative_tables = num_non_derivative_tables,
+                                 num_non_derivative_tran = num_non_derivative_tran, num_non_derivative_hold = num_non_derivative_hold,
+                                 num_non_derivative_sec = num_non_derivative_sec, total_non_derivative_nodes = total_non_derivative_nodes,
+                                 got_table2 = got_table2, num_derivative_tables = num_derivative_tables,
+                                 num_derivative_tran = num_derivative_tran, num_derivative_hold = num_derivative_hold,
+                                 num_derivative_sec= num_derivative_sec, total_derivative_nodes = total_derivative_nodes,
+                                 got_footnotes = got_footnotes, got_footnote_indices = got_footnote_indices,
+                                 got_signatures = got_signatures, wrote_header = wrote_header, wrote_rep_own = wrote_rep_own,
+                                 wrote_table1 = wrote_table1, wrote_table2 = wrote_table2, wrote_footnotes = wrote_footnotes,
+                                 wrote_footnote_indices = wrote_footnote_indices, wrote_signatures = wrote_signatures,
+                                 stringsAsFactors = FALSE)
+
+        dbWriteTable(pg, c("edgar", "xml_process_table"), process_df, append = TRUE, row.names = FALSE)
+
+        fully_processed <- TRUE
+
+    }, {fully_processed <- FALSE})
 
     dbDisconnect(pg)
 
-    return(process_df)
+    return(fully_processed)
 
 }
