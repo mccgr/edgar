@@ -37,7 +37,7 @@ get_345_xml_docs <- function(num_docs = Inf) {
 
     xml_full_set <- tbl(pg, sql("SELECT file_name, document, type AS form_type FROM edgar.filing_docs WHERE type IN ('3', '4', '5')")) %>% filter(document %~% "xml$")
 
-    new_table <- !dbExistsTable(pg, c("edgar", "xml_process_table"))
+    new_table <- !dbExistsTable(pg, c("edgar", "xml_fully_processed"))
 
 
     if(new_table) {
@@ -48,9 +48,9 @@ get_345_xml_docs <- function(num_docs = Inf) {
 
         xml_subset <- xml_full_set %>% collect(n = num_docs)
 
-        xml_process_table <- tbl(pg, sql("SELECT file_name, document FROM edgar.xml_process_table"))
+        xml_fully_processed_table <- tbl(pg, sql("SELECT file_name, document FROM edgar.xml_fully_processed"))
 
-        xml_subset <- xml_full_set %>% anti_join(xml_process_table, by = c('file_name', 'document')) %>% collect(n = num_docs)
+        xml_subset <- xml_full_set %>% anti_join(xml_fully_processed_table, by = c('file_name', 'document')) %>% collect(n = num_docs)
 
     }
 
@@ -67,28 +67,27 @@ num_full_success = 0
 total_processed = 0
 total_time = 0
 
-logical_cols <- c('got_xml', 'got_header', 'got_table1', 'got_table2', 'got_footnotes', 'got_footnote_indices', 'got_signatures',
-                  'wrote_header', 'wrote_table1', 'wrote_table2', 'wrote_footnotes', 'wrote_footnote_indices', 'wrote_signatures')
-
-
 table_list <- c('forms345_header', 'forms345_reporting_owners', 'forms345_table1', 'forms345_table2', 'forms345_footnotes',
-                'forms345_footnote_indices', 'forms345_signatures', 'xml_process_table')
+                'forms345_footnote_indices', 'forms345_signatures', 'xml_process_table', 'xml_fully_processed')
 
 pg <- dbConnect(PostgreSQL())
 
-new_table <- !dbExistsTable(pg, c("edgar", "xml_process_table"))
-while(batch_size <- nrow(batch <- get_345_xml_docs(num_docs = 100))) {
+new_table <- !dbExistsTable(pg, c("edgar", "xml_fully_processed"))
+while((batch_size <- nrow(batch <- get_345_xml_docs(num_docs = 100))) > 0 & num_full_success <= 1000000) {
 
 
-    time_taken <- system.time(temp <- bind_rows(mclapply(1:batch_size, function(j) {process_345_filing(batch[["file_name"]][j], batch[["document"]][j], batch[["form_type"]][j])}, mc.cores =  24)))
+    time_taken <- system.time(temp <- unlist(mclapply(1:batch_size, function(j) {process_345_filing(batch[["file_name"]][j], batch[["document"]][j], batch[["form_type"]][j])}, mc.cores =  24)))
     total_time <- total_time + time_taken
-    num_full_success <- num_full_success + sum(rowSums(temp[, logical_cols]) == 13)
+    num_full_success <- num_full_success + sum(temp)
     total_processed <- total_processed + batch_size
-    dbWriteTable(pg, c("edgar", "xml_process_table"), temp, append = !new_table, row.names = FALSE)
+
+    fully_processed <- data.frame(file_name = batch$file_name, document = batch$document, fully_processed = temp)
+
+    dbWriteTable(pg, c("edgar", "xml_fully_processed"), fully_processed, append = TRUE, row.names = FALSE)
 
     if(new_table) {
 
-        # if xml_process_table is a new table, so are the rest of them. Hence set permissions and access for all tables in table_list
+        # if xml_fully_processed is a new table, so are the rest of them. Hence set permissions and access for all tables in table_list
 
         for(tab_name in table_list) {
 
