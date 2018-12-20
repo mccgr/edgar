@@ -841,7 +841,10 @@ get_header_footnotes <- function(xml_root) {
 
     name <- xmlName(child)
 
-    if(!(name %in% c('nonDerivativeTable', 'derivativeTable', 'footnotes'))) {
+    non_header_nodes <- c('nonDerivativeTable', 'derivativeTable', 'nonDerivativeSecurity', 'derivativeSecurity',
+                          'reportingOwner', 'footnotes', 'ownerSignature')
+
+    if(!(name %in% non_header_nodes)) {
 
       part <- get_node_footnotes(child)
       if(dim(part)[1] > 0) {
@@ -1054,47 +1057,103 @@ process_345_filing <- function(file_name, document, form_type) {
             signatures <- get_signature_df(xml_root, file_name, document)
             got_signatures <- TRUE}, {got_signatures <- FALSE})
 
-        try({
-            if(nrow(header) & got_header) {
-                dbWriteTable(pg, c("edgar", "forms345_header"), header, append = TRUE, row.names = FALSE)
-            }
-            wrote_header <- TRUE}, {wrote_header <- FALSE})
+        if(got_header) {
 
-        try({
-            if(nrow(rep_own) & got_rep_own) {
-                dbWriteTable(pg, c("edgar", "forms345_reporting_owners"), rep_own, append = TRUE, row.names = FALSE)
-            }
-            wrote_rep_own <- TRUE}, {wrote_rep_own <- FALSE})
+            try({
+                if(nrow(header)) {
+                    dbWriteTable(pg, c("edgar", "forms345_header"), header, append = TRUE, row.names = FALSE)
+                }
+                wrote_header <- TRUE}, {wrote_header <- FALSE})
 
-        try({
-            if(nrow(table1) & got_table1) {
-                dbWriteTable(pg, c("edgar", "forms345_table1"), table1, append = TRUE, row.names = FALSE)
-            }
-            wrote_table1 <- TRUE}, {wrote_table1 <- FALSE})
+        } else {
 
-        try({
-            if(nrow(table2) & got_table2) {
-                dbWriteTable(pg, c("edgar", "forms345_table2"), table2, append = TRUE, row.names = FALSE)
-            }
-            wrote_table2 <- TRUE}, {wrote_table2 <- FALSE})
+            wrote_header <- FALSE
 
-        try({
-            if(nrow(footnotes) & got_footnotes) {
-                dbWriteTable(pg, c("edgar", "forms345_footnotes"), footnotes, append = TRUE, row.names = FALSE)
-            }
-            wrote_footnotes <- TRUE}, {wrote_footnotes <- FALSE})
+        }
 
-        try({
-            if(nrow(footnote_indices) & got_footnote_indices){
-                dbWriteTable(pg, c("edgar", "forms345_footnote_indices"), footnote_indices, append = TRUE, row.names = FALSE)
-            }
-            wrote_footnote_indices <- TRUE}, {wrote_footnote_indices <- FALSE})
+        if(got_rep_own) {
 
-        try({
-            if(nrow(signatures) & got_signatures){
-                dbWriteTable(pg, c("edgar", "forms345_signatures"), signatures, append = TRUE, row.names = FALSE)
-            }
-            wrote_signatures <- TRUE}, {wrote_signatures <- FALSE})
+            try({
+                if(nrow(rep_own)) {
+                    dbWriteTable(pg, c("edgar", "forms345_reporting_owners"), rep_own, append = TRUE, row.names = FALSE)
+                }
+                wrote_rep_own <- TRUE}, {wrote_rep_own <- FALSE})
+
+        } else {
+
+            wrote_rep_own <- FALSE
+
+        }
+
+        if(got_table1) {
+
+            try({
+                if(nrow(table1)) {
+                    dbWriteTable(pg, c("edgar", "forms345_table1"), table1, append = TRUE, row.names = FALSE)
+                }
+                wrote_table1 <- TRUE}, {wrote_table1 <- FALSE})
+
+        } else {
+
+            wrote_table1 <- FALSE
+
+        }
+
+        if(got_table2) {
+
+            try({
+                if(nrow(table2)) {
+                    dbWriteTable(pg, c("edgar", "forms345_table2"), table2, append = TRUE, row.names = FALSE)
+                }
+                wrote_table2 <- TRUE}, {wrote_table2 <- FALSE})
+
+        } else {
+
+            wrote_table2 <- FALSE
+
+        }
+
+        if(got_footnotes) {
+
+            try({
+                if(nrow(footnotes)) {
+                    dbWriteTable(pg, c("edgar", "forms345_footnotes"), footnotes, append = TRUE, row.names = FALSE)
+                }
+                wrote_footnotes <- TRUE}, {wrote_footnotes <- FALSE})
+
+        } else {
+
+            wrote_footnotes <- FALSE
+
+        }
+
+        if(got_footnote_indices) {
+
+            try({
+                if(nrow(footnote_indices)){
+                    dbWriteTable(pg, c("edgar", "forms345_footnote_indices"), footnote_indices, append = TRUE, row.names = FALSE)
+                }
+                wrote_footnote_indices <- TRUE}, {wrote_footnote_indices <- FALSE})
+
+        } else {
+
+            wrote_footnote_indices <- FALSE
+
+        }
+
+        if(got_signatures) {
+
+            try({
+                if(nrow(signatures)){
+                    dbWriteTable(pg, c("edgar", "forms345_signatures"), signatures, append = TRUE, row.names = FALSE)
+                }
+                wrote_signatures <- TRUE}, {wrote_signatures <- FALSE})
+
+        } else {
+
+            wrote_signatures <- FALSE
+
+        }
 
 
         process_df <- data.frame(file_name = file_name, document = document, form_type = form_type, got_xml = got_xml,
@@ -1122,3 +1181,24 @@ process_345_filing <- function(file_name, document, form_type) {
     return(fully_processed)
 
 }
+
+
+delete_345_data <- function(file_name, document) {
+
+    pg <- dbConnect(PostgreSQL())
+
+    table_list <- c('forms345_header', 'forms345_reporting_owners', 'forms345_table1', 'forms345_table2',
+                    'forms345_footnotes', 'forms345_footnote_indices', 'forms345_signatures', 'xml_process_table',
+                    'xml_fully_processed')
+
+    for(table_name in table_list) {
+
+    query <- paste0("DELETE FROM edgar.", table_name, " WHERE file_name = ", file_name, " AND document = ", document)
+    dbGetQuery(pg, query)
+
+    }
+
+    dbDisconnect(pg)
+
+}
+
