@@ -37,7 +37,7 @@ get_345_xml_docs <- function(num_docs = Inf) {
 
     xml_full_set <- tbl(pg, sql("SELECT file_name, document, type AS form_type FROM edgar.filing_docs WHERE type IN ('3', '4', '5')")) %>% filter(document %~% "xml$")
 
-    new_table <- !dbExistsTable(pg, c("edgar", "xml_fully_processed"))
+    new_table <- !dbExistsTable(pg, c("edgar", "forms345_xml_fully_processed"))
 
 
     if(new_table) {
@@ -48,7 +48,7 @@ get_345_xml_docs <- function(num_docs = Inf) {
 
         xml_subset <- xml_full_set %>% collect(n = num_docs)
 
-        xml_fully_processed_table <- tbl(pg, sql("SELECT file_name, document FROM edgar.xml_fully_processed"))
+        xml_fully_processed_table <- tbl(pg, sql("SELECT file_name, document FROM edgar.forms345_xml_fully_processed"))
 
         xml_subset <- xml_full_set %>% anti_join(xml_fully_processed_table, by = c('file_name', 'document')) %>% collect(n = num_docs)
 
@@ -66,13 +66,14 @@ get_345_xml_docs <- function(num_docs = Inf) {
 
 
 table_list <- c('forms345_header', 'forms345_reporting_owners', 'forms345_table1', 'forms345_table2', 'forms345_footnotes',
-                'forms345_footnote_indices', 'forms345_signatures', 'xml_process_table', 'xml_fully_processed')
+                'forms345_footnote_indices', 'forms345_signatures', 'forms345_xml_process_table',
+                'forms345_xml_fully_processed')
 
 pg <- dbConnect(PostgreSQL())
 
 form345_xml_docs_to_process <- get_345_xml_docs(num_docs = 1000000)
 
-new_table <- !dbExistsTable(pg, c("edgar", "xml_fully_processed"))
+new_table <- !dbExistsTable(pg, c("edgar", "forms345_xml_fully_processed"))
 
 num_filings <- dim(form345_xml_docs_to_process)[1]
 batch_size <- 100
@@ -103,7 +104,7 @@ for(i in 1:num_batches) {
 
     fully_processed <- data.frame(file_name = batch$file_name, document = batch$document, fully_processed = temp)
 
-    dbWriteTable(pg, c("edgar", "xml_fully_processed"), fully_processed, append = TRUE, row.names = FALSE)
+    dbWriteTable(pg, c("edgar", "forms345_xml_fully_processed"), fully_processed, append = TRUE, row.names = FALSE)
 
     if(new_table) {
 
