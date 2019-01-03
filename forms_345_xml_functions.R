@@ -1221,8 +1221,8 @@ delete_345_data <- function(file_name, document) {
     pg <- dbConnect(PostgreSQL())
 
     table_list <- c('forms345_header', 'forms345_reporting_owners', 'forms345_table1', 'forms345_table2',
-                    'forms345_footnotes', 'forms345_footnote_indices', 'forms345_signatures', 'xml_process_table',
-                    'xml_fully_processed')
+                    'forms345_footnotes', 'forms345_footnote_indices', 'forms345_signatures',
+                    'forms345_xml_process_table', 'forms345_xml_fully_processed')
 
     for(table_name in table_list) {
 
