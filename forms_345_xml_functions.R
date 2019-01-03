@@ -991,8 +991,7 @@ get_full_footnote_indices <- function(xml_root, file_name, document) {
         signature$table <- 'signatures'
     }
 
-    full_df <- full_df %>% bind_rows(header) %>% bind_rows(non_deriv) %>% bind_rows(deriv)
-    %>% bind_rows(rep_owner) %>% bind_rows(signature)
+    full_df <- full_df %>% bind_rows(header) %>% bind_rows(non_deriv) %>% bind_rows(deriv) %>% bind_rows(rep_owner) %>% bind_rows(signature)
 
     if(nrow(full_df)) {
 
