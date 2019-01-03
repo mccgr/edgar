@@ -19,7 +19,7 @@ set_permissions_access <- function(table_name) {
 }
 
 
-make_table_comment <- function(table, table_comment) {
+make_table_comment <- function(table_name, table_comment) {
 
     pg <- dbConnect(PostgreSQL())
 
@@ -63,23 +63,43 @@ get_345_xml_docs <- function(num_docs = Inf) {
 
 }
 
-num_full_success = 0
-total_processed = 0
-total_time = 0
+
 
 table_list <- c('forms345_header', 'forms345_reporting_owners', 'forms345_table1', 'forms345_table2', 'forms345_footnotes',
                 'forms345_footnote_indices', 'forms345_signatures', 'xml_process_table', 'xml_fully_processed')
 
 pg <- dbConnect(PostgreSQL())
 
+form345_xml_docs_to_process <- get_345_xml_docs(num_docs = 1000000)
+
 new_table <- !dbExistsTable(pg, c("edgar", "xml_fully_processed"))
-while((batch_size <- nrow(batch <- get_345_xml_docs(num_docs = 100))) > 0 & num_full_success <= 1000000) {
 
+num_filings <- dim(form345_xml_docs_to_process)[1]
+batch_size <- 100
+num_batches <- ceiling(num_filings/batch_size)
+num_full_success <- 0
+total_processed <- 0
+total_time <- 0
 
-    time_taken <- system.time(temp <- unlist(mclapply(1:batch_size, function(j) {process_345_filing(batch[["file_name"]][j], batch[["document"]][j], batch[["form_type"]][j])}, mc.cores =  24)))
+for(i in 1:num_batches) {
+
+    start <- (i - 1) * batch_size + 1
+
+    if(i == num_batches){
+
+        batch <- form345_xml_docs_to_process[start:num_filings, ]
+
+    } else {
+
+        finish <- i * batch_size
+        batch <- form345_xml_docs_to_process[start:finish, ]
+
+    }
+
+    time_taken <- system.time(temp <- unlist(mclapply(1:dim(batch)[1], function(j) {process_345_filing(batch[["file_name"]][j], batch[["document"]][j], batch[["form_type"]][j])}, mc.cores =  24)))
     total_time <- total_time + time_taken
     num_full_success <- num_full_success + sum(temp)
-    total_processed <- total_processed + batch_size
+    total_processed <- total_processed + dim(batch)[1]
 
     fully_processed <- data.frame(file_name = batch$file_name, document = batch$document, fully_processed = temp)
 
@@ -101,7 +121,7 @@ while((batch_size <- nrow(batch <- get_345_xml_docs(num_docs = 100))) > 0 & num_
     }
 
 
-    if(total_processed %% 10000 == 0) {
+    if(total_processed %% 10000 == 0 | i == num_batches) {
 
         print("Total time taken: \n")
         print(total_time)
@@ -124,5 +144,6 @@ for(tab_name in table_list) {
 
 }
 
-
 dbDisconnect(pg)
+
+
