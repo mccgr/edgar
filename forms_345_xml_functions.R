@@ -1204,7 +1204,7 @@ process_345_filing <- function(file_name, document, form_type) {
                                  wrote_footnote_indices = wrote_footnote_indices, wrote_signatures = wrote_signatures,
                                  stringsAsFactors = FALSE)
 
-        dbWriteTable(pg, c("edgar", "xml_process_table"), process_df, append = TRUE, row.names = FALSE)
+        dbWriteTable(pg, c("edgar", "form345_xml_process_table"), process_df, append = TRUE, row.names = FALSE)
 
         fully_processed <- TRUE
 
