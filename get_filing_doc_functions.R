@@ -17,7 +17,6 @@ get_index_url <- function(file_name) {
 
 get_filing_docs <- function(file_name) {
 
-
     try({head_url <- get_index_url(file_name)
 
     table_nodes <-
@@ -41,12 +40,9 @@ get_filing_docs <- function(file_name) {
 
     return(TRUE)}, {return(FALSE)})
 
-
 }
 
-
 get_filing_docs_alt <- function(file_name) {
-
 
     try({head_url <- get_index_url(file_name)
 
@@ -59,11 +55,20 @@ get_filing_docs_alt <- function(file_name) {
                      size = NA, file_name = file_name)
     } else {
 
-        df <- table_nodes %>% html_table() %>% bind_rows() %>% fix_names() %>% mutate(file_name = file_name, type = as.character(type))
+        df <-
+            table_nodes %>%
+            html_table() %>%
+            bind_rows() %>%
+            fix_names() %>%
+            mutate(file_name = file_name, type = as.character(type))
 
         colnames(df) <- tolower(colnames(df))
 
-        hrefs <- table_nodes %>% html_nodes("tr") %>% html_nodes("a") %>% html_attr("href")
+        hrefs <-
+            table_nodes %>%
+            html_nodes("tr") %>%
+            html_nodes("a") %>%
+            html_attr("href")
 
         hrefs <- unlist(lapply(hrefs, function(x) {paste0('https://www.sec.gov', x)}))
 
@@ -76,10 +81,7 @@ get_filing_docs_alt <- function(file_name) {
     dbDisconnect(pg)
 
     return(TRUE)}, {return(FALSE)})
-
-
 }
-
 
 fix_names <- function(df) {
     colnames(df) <- tolower(colnames(df))
@@ -95,7 +97,6 @@ get_filing_docs_table_nodes <- function(file_name) {
         html_nodes("table")
 
     return(table_nodes)
-
 }
 
 get_num_tables <- function(file_name) {
@@ -103,12 +104,13 @@ get_num_tables <- function(file_name) {
     table_nodes <- get_filing_docs_table_nodes(file_name)
     num_tables <- length(table_nodes)
     return(num_tables)
-
 }
 
 get_filings_by_type <- function(type_regex) {
-# A function which takes as an argument a regular expression which catches filings of one or several types, and returns the file names for the set of filings from edgar.filings filtered by those types for which
-# the documents have not yet been processed into edgar.filing_docs
+    # A function which takes as an argument a regular expression which
+    # catches filings of one or several types, and returns the file names
+    # for the set of filings from edgar.filings filtered by those types for which
+    # the documents have not yet been processed into edgar.filing_docs
 
     pg <- dbConnect(PostgreSQL())
 
@@ -133,7 +135,6 @@ get_filings_by_type <- function(type_regex) {
     rs <- dbDisconnect(pg)
 
     return(file_names)
-
 }
 
 process_filings <- function(filings_df) {
@@ -153,7 +154,6 @@ process_filings <- function(filings_df) {
     temp <- unlist(temp)
 
     return(temp)
-
 }
 
 process_filings_alt <- function(filings_df) {
@@ -175,6 +175,4 @@ process_filings_alt <- function(filings_df) {
     temp <- unlist(temp)
 
     return(temp)
-
 }
-
