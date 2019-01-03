@@ -863,113 +863,147 @@ get_header_footnotes <- function(xml_root) {
 }
 
 
-get_derivativeTable_footnotes <- function(xml_root) {
+get_table_footnotes_df <- function(nodes) {
 
-  if(length(derivative_table <- getNodeSet(xml_root, 'derivativeTable'))) {
+    # This is a function for turning lists of nodes with the same name into dataframes containing the footnote
+    # indices. This is relevant for the tables regarding the reporting owners, tables 1 and 2, and signatures
 
-    derivative_nodes <- getNodeSet(derivative_table[[1]], c('derivativeTransaction', 'derivativeHolding'))
-    num_nodes <- length(derivative_nodes)
+    num_nodes <- length(nodes)
 
-  } else {
+    df <- data.frame(matrix(nrow = 0, ncol = 3))
+    colnames(df) <- c('seq', 'footnote_variable', 'footnote_index')
 
-    num_nodes <- 0
+    if(num_nodes) {
+        for(i in 1:num_nodes) {
 
-  }
+            part <- get_node_footnotes(nodes[[i]])
+            if(dim(part)[1] > 0) {
 
+                part$seq <- i
+                df <- bind_rows(df, part)
 
-  df <- data.frame(matrix(nrow = 0, ncol = 3))
-  colnames(df) <- c('seq', 'footnote_variable', 'footnote_index')
+            }
 
-  if(num_nodes) {
-    for(i in 1:length(derivative_nodes)) {
-
-      part <- get_node_footnotes(derivative_nodes[[i]])
-      if(dim(part)[1] > 0) {
-
-        part$seq <- i
-        df <- bind_rows(df, part)
-
-      }
+        }
 
     }
 
+    return(df)
+
+}
+
+get_rep_owner_footnotes <- function(xml_root) {
+
+    rep_owner_nodes <- getNodeSet(xml_root, 'reportingOwner')
+    df <- get_table_footnotes_df(rep_owner_nodes)
+
+    return(df)
+
+}
+
+get_signature_footnotes <- function(xml_root) {
+
+    signature_nodes <- getNodeSet(xml_root, 'ownerSignature')
+    df <- get_table_footnotes_df(signature_nodes)
+
+    return(df)
+
+}
+
+
+get_derivativeTable_footnotes <- function(xml_root) {
+
+  deriv_sec <- getNodeSet(xml_root, 'derivativeSecurity')
+  deriv_sec_df <- get_table_footnotes_df(deriv_sec)
+
+  deriv_sec_df$footnote_variable[deriv_sec_df$footnote_variable == 'transactionValue'] <- 'transactionPricePerShare'
+
+  if(length(derivative_table <- getNodeSet(xml_root, 'derivativeTable'))) {
+
+      deriv_tranhold <- getNodeSet(derivative_table[[1]], c('derivativeTransaction', 'derivativeHolding'))
+      deriv_tranhold_df <- get_table_footnotes_df(deriv_tranhold)
+      full_df <- bind_rows(deriv_sec_df, deriv_tranhold_df)
+
+  } else {
+
+      full_df <- deriv_sec_df
+
   }
 
+  full_df <- bind_rows(deriv_sec_df, deriv_tranhold_df)
 
-  return(df)
+  return(full_df)
 
 }
 
 
 get_nonDerivativeTable_footnotes <- function(xml_root) {
 
-  if(length(non_derivative_table <- getNodeSet(xml_root, 'nonDerivativeTable'))) {
+    non_deriv_sec <- getNodeSet(xml_root, 'nonDerivativeSecurity')
+    non_deriv_sec_df <- get_table_footnotes_df(non_deriv_sec)
 
-    nonDerivative_nodes <- getNodeSet(non_derivative_table[[1]], c('nonDerivativeTransaction', 'nonDerivativeHolding'))
-    num_nodes <- length(nonDerivative_nodes)
+    non_deriv_sec_df$footnote_variable[non_deriv_sec_df$footnote_variable == 'transactionValue'] <- 'transactionPricePerShare'
 
-  } else {
+    if(length(non_derivative_table <- getNodeSet(xml_root, 'nonDerivativeTable'))) {
 
-    num_nodes <- 0
+        non_deriv_tranhold <- getNodeSet(non_derivative_table[[1]], c('nonDerivativeTransaction', 'nonDerivativeHolding'))
+        non_deriv_tranhold_df <- get_table_footnotes_df(non_deriv_tranhold)
+        full_df <- bind_rows(non_deriv_sec_df, non_deriv_tranhold_df)
 
-  }
+    } else {
 
-  df <- data.frame(matrix(nrow = 0, ncol = 3))
-  colnames(df) <- c('seq', 'footnote_variable', 'footnote_index')
-
-  if(num_nodes) {
-    for(i in 1:length(nonDerivative_nodes)) {
-
-      part <- get_node_footnotes(nonDerivative_nodes[[i]])
-      if(dim(part)[1] > 0) {
-
-        part$seq <- i
-        df <- bind_rows(df, part)
-
-      }
+        full_df <- non_deriv_sec_df
 
     }
 
-  }
 
-  return(df)
+    return(full_df)
 
 }
 
 
 get_full_footnote_indices <- function(xml_root, file_name, document) {
 
-  full_df <- data.frame(matrix(nrow = 0, ncol = 6))
-  colnames(full_df) <- c('file_name', 'document', 'table', 'seq', 'footnote_variable', 'footnote_index')
+    full_df <- data.frame(matrix(nrow = 0, ncol = 6))
+    colnames(full_df) <- c('file_name', 'document', 'table', 'seq', 'footnote_variable', 'footnote_index')
 
-  header <- get_header_footnotes(xml_root)
-  non_deriv <- get_nonDerivativeTable_footnotes(xml_root)
-  deriv <- get_derivativeTable_footnotes(xml_root)
+    header <- get_header_footnotes(xml_root)
+    non_deriv <- get_nonDerivativeTable_footnotes(xml_root)
+    deriv <- get_derivativeTable_footnotes(xml_root)
+    rep_owner <- get_rep_owner_footnotes(xml_root)
+    signature <- get_signature_footnotes(xml_root)
 
-  # Assign table names in new column 'table' for each part, if they are not trivial
+    # Assign table names in new column 'table' for each part, if they are not trivial
 
-  if(nrow(header)) {
-    header$table <- 'header'
-  }
-  if(nrow(non_deriv)) {
-    non_deriv$table <- 'table1'
-  }
-  if(nrow(deriv)) {
-    deriv$table <- 'table2'
-  }
+    if(nrow(header)) {
+        header$table <- 'header'
+    }
+    if(nrow(non_deriv)) {
+        non_deriv$table <- 'table1'
+    }
+    if(nrow(deriv)) {
+        deriv$table <- 'table2'
+    }
+    if(nrow(rep_owner)) {
+        rep_owner$table <- 'reporting_owners'
+    }
+    if(nrow(signature)) {
+        signature$table <- 'signatures'
+    }
 
-  full_df <- full_df %>% bind_rows(header) %>% bind_rows(non_deriv) %>% bind_rows(deriv)
+    full_df <- full_df %>% bind_rows(header) %>% bind_rows(non_deriv) %>% bind_rows(deriv)
+    %>% bind_rows(rep_owner) %>% bind_rows(signature)
 
-  if(nrow(full_df)) {
+    if(nrow(full_df)) {
 
-    full_df$file_name <- file_name
-    full_df$document <- document
+        full_df$file_name <- file_name
+        full_df$document <- document
 
-  }
+    }
 
-  full_df <- full_df[, c('file_name', 'document', 'table', 'seq', 'footnote_variable', 'footnote_index')]
+    full_df <- full_df[, c('file_name', 'document', 'table', 'seq', 'footnote_variable', 'footnote_index')]
 
-  return(full_df)
+    return(full_df)
 
 }
 
