@@ -42,10 +42,8 @@ get_filing_docs <- function(file_name) {
          df
      }
 
-     df
+    df
 }
-
-
 
 pg <- dbConnect(PostgreSQL())
 
@@ -53,7 +51,7 @@ filings <- tbl(pg, sql("SELECT * FROM edgar.filings"))
 
 def14_a <-
     filings %>%
-    filter(form_type %~% "^(10-K|DEF 14|8-K|6-K|13|[345](/A)?$)")
+    filter(form_type %~% "^(10-K|SC 13[DG](/A)?|DEF 14|8-K|6-K|13|[345](/A)?$)")
 
 new_table <- !dbExistsTable(pg, c("edgar", "filing_docs"))
 
@@ -63,15 +61,34 @@ if (!new_table) {
 }
 
 get_file_names <- function() {
+
     def14_a %>%
     select(file_name) %>%
     distinct() %>%
-    collect(n = 1000)
+    collect(n = 100)
+
 }
-rs <- dbDisconnect(pg)
 
 library(parallel)
-system.time(temp <- bind_rows(mclapply(file_names$file_name[1:100], get_filing_docs)))
+
+batch <- 0
+while(nrow(file_names <- get_file_names()) > 0) {
+    batch <- batch + 1
+    cat("Processing batch", batch, "\n")
+    temp <- mclapply(file_names$file_name, get_filing_docs, mc.cores = 6)
+    if (length(temp) > 0) {
+        df <- bind_rows(temp)
+
+        if (nrow(df) > 0) {
+            cat("Writing data ...\n")
+            dbWriteTable(pg, c("edgar", "filing_docs"),
+                         df, append = TRUE, row.names = FALSE)
+
+        } else {
+            cat("No data ...\n")
+        }
+    }
+}
 
 if (new_table) {
     pg <- dbConnect(PostgreSQL())
