@@ -65,9 +65,9 @@ get_sgml_file <- function(path) {
                          gsub("(-|\\.hdr\\.sgml$)", "",
                               sgml_basename, perl=TRUE))
   sgml_path_old <- file.path(dirname(path), sgml_basename)
-  ftp <- file.path("http://www.sec.gov/Archives", sgml_path, sgml_basename)
+  ftp <- file.path("https://www.sec.gov/Archives", sgml_path, sgml_basename)
 
-  ftp_old <- file.path("http://www.sec.gov/Archives", sgml_path_old,
+  ftp_old <- file.path("https://www.sec.gov/Archives", sgml_path_old,
                        sgml_basename)
 
   # The local filename for the SGML file
@@ -94,7 +94,7 @@ get_sgml_file <- function(path) {
     }
   } else {
     # Download the file from the "new" location
-    dir.create(dirname(local_filename), showWarnings=FALSE, recursive=TRUE)
+    dir.create(dirname(local_filename)) #, showWarnings=FALSE, recursive=TRUE)
     new <- try(download.file(url=ftp, destfile=local_filename))
     if (new==0) {
       return(file.path(sgml_path, sgml_basename))

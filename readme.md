@@ -16,7 +16,7 @@ Code:  [`get_item_nos.R`](get_item_nos.R)
 ### Tables used in updating tables above
 
 - `index_last_modified`: Table used in updating `filings`.
-- `filing_docs_processed`: Table used in updating `filing_docs`. 
+- `filing_docs_processed`: Table used in keeping track of documents in `filing_docs` that have been downloaded using [download_filing_docs.R](download_filing_docs.R).
 - `server_log_processed`: Table used in updating `server_log`.
 
 ## Code
