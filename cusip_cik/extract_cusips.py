@@ -3,7 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 import psycopg2
 import re
-s
+
 page = requests.get('https://www.sec.gov/Archives/edgar/data/315066/000031506618001444/filing.txt')
 soup = BeautifulSoup(page.content, 'html.parser')
 text = soup.getText()
