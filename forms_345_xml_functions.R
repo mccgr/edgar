@@ -446,8 +446,9 @@ scrape_filing_table <- function(xml_root, table) {
 
         }
 
-        ncol_init <- 6
-        rest_cols <- c('seq', 'transactionOrHolding', 'securityTitle', 'transactionDate', 'deemedExecutionDate', 'transactionTimeliness')
+        ncol_init <- 7
+        rest_cols <- c('seq', 'tab_index', 'transactionOrHolding', 'securityTitle', 'transactionDate',
+                       'deemedExecutionDate', 'transactionTimeliness')
         df <- data.frame(matrix(nrow = 0, ncol = ncol_init), stringsAsFactors = F)
 
     } else if(table == 2) {
@@ -463,9 +464,9 @@ scrape_filing_table <- function(xml_root, table) {
 
         }
 
-        ncol_init <- 9
-        rest_cols <- c('seq', 'transactionOrHolding', 'securityTitle', 'conversionOrExercisePrice', 'transactionDate', 'deemedExecutionDate',
-                       'transactionTimeliness', 'exerciseDate', 'expirationDate')
+        ncol_init <- 10
+        rest_cols <- c('seq', 'tab_index', 'transactionOrHolding', 'securityTitle', 'conversionOrExercisePrice',
+                       'transactionDate', 'deemedExecutionDate', 'transactionTimeliness', 'exerciseDate', 'expirationDate')
         df <- data.frame(matrix(nrow = 0, ncol = ncol_init), stringsAsFactors = F)
         subnode_names <- c(subnode_names, 'underlyingSecurity')
 
@@ -489,6 +490,7 @@ scrape_filing_table <- function(xml_root, table) {
 
             tab_df <- bind_rows(tab_df, xmlToDataFrame(nodes_list[[i]]))
             tab_df$seq <- rownames(tab_df)
+            tab_df$tab_index <- i
             tab_df$transactionOrHolding <- unlist(lapply(nodes_list[[i]], determine_table_entry_type))
             tab_df <- tab_df[, rest_cols]
 
@@ -616,8 +618,8 @@ get_securities_X0101 <- function(xml_root, table) {
 get_nonDerivative_df <- function(xml_root, file_name, document, form_type) {
 
 
-  full_df <- data.frame(matrix(nrow = 0, ncol = 19), stringsAsFactors = F)
-  nonDeriv_columns <- c('file_name', 'document', 'form_type', 'transactionOrHolding', 'seq', 'securityTitle',
+  full_df <- data.frame(matrix(nrow = 0, ncol = 20), stringsAsFactors = F)
+  nonDeriv_columns <- c('file_name', 'document', 'form_type', 'transactionOrHolding', 'seq', 'tab_index', 'securityTitle',
                         'transactionDate', 'deemedExecutionDate', 'transactionFormType', 'transactionCode',
                         'equitySwapInvolved', 'transactionTimeliness', 'transactionShares', 'transactionPricePerShare',
                         'transactionAcquiredDisposedCode', 'sharesOwnedFollowingTransaction',
@@ -686,8 +688,8 @@ get_nonDerivative_df <- function(xml_root, file_name, document, form_type) {
 get_derivative_df <- function(xml_root, file_name, document, form_type) {
 
 
-  full_df <- data.frame(matrix(nrow = 0, ncol = 26), stringsAsFactors = F)
-  deriv_columns <- c('file_name', 'document', 'form_type', 'transactionOrHolding', 'seq', 'securityTitle',
+  full_df <- data.frame(matrix(nrow = 0, ncol = 27), stringsAsFactors = F)
+  deriv_columns <- c('file_name', 'document', 'form_type', 'transactionOrHolding', 'seq', 'tab_index', 'securityTitle',
                      'conversionOrExercisePrice', 'transactionDate', 'deemedExecutionDate', 'transactionFormType',
                      'transactionCode', 'equitySwapInvolved', 'transactionTimeliness', 'transactionShares',
                      'transactionTotalValue', 'transactionPricePerShare', 'transactionAcquiredDisposedCode',
@@ -918,10 +920,23 @@ get_derivativeTable_footnotes <- function(xml_root) {
 
   deriv_sec_df$footnote_variable[deriv_sec_df$footnote_variable == 'transactionValue'] <- 'transactionPricePerShare'
 
-  if(length(derivative_table <- getNodeSet(xml_root, 'derivativeTable'))) {
+  if(num_tab <- length(derivative_table <- getNodeSet(xml_root, 'derivativeTable'))) {
 
-      deriv_tranhold <- getNodeSet(derivative_table[[1]], c('derivativeTransaction', 'derivativeHolding'))
-      deriv_tranhold_df <- get_table_footnotes_df(deriv_tranhold)
+      deriv_tranhold_df <- data.frame(matrix(nrow = 0, ncol = 4))
+      colnames(deriv_tranhold_df) <- c('tab_index', 'seq', 'footnote_variable', 'footnote_index')
+      for(i in 1:num_tab) {
+
+          deriv_tranhold_i <- getNodeSet(derivative_table[[1]], c('derivativeTransaction', 'derivativeHolding'))
+          part <- get_table_footnotes_df(deriv_tranhold_i)
+          if(nrow(part)) {
+
+              part$tab_index <- i
+              deriv_tranhold_df <- bind_rows(deriv_tranhold_df, part)
+
+          }
+
+      }
+
       full_df <- bind_rows(deriv_sec_df, deriv_tranhold_df)
 
   } else {
@@ -929,8 +944,6 @@ get_derivativeTable_footnotes <- function(xml_root) {
       full_df <- deriv_sec_df
 
   }
-
-  full_df <- bind_rows(deriv_sec_df, deriv_tranhold_df)
 
   return(full_df)
 
@@ -944,10 +957,24 @@ get_nonDerivativeTable_footnotes <- function(xml_root) {
 
     non_deriv_sec_df$footnote_variable[non_deriv_sec_df$footnote_variable == 'transactionValue'] <- 'transactionPricePerShare'
 
-    if(length(non_derivative_table <- getNodeSet(xml_root, 'nonDerivativeTable'))) {
+    if(num_tab <- length(non_derivative_table <- getNodeSet(xml_root, 'nonDerivativeTable'))) {
 
-        non_deriv_tranhold <- getNodeSet(non_derivative_table[[1]], c('nonDerivativeTransaction', 'nonDerivativeHolding'))
-        non_deriv_tranhold_df <- get_table_footnotes_df(non_deriv_tranhold)
+        non_deriv_tranhold_df <- data.frame(matrix(nrow = 0, ncol = 4))
+        colnames(non_deriv_tranhold_df) <- c('tab_index', 'seq', 'footnote_variable', 'footnote_index')
+
+        for(i in 1:num_tab) {
+
+            non_deriv_tranhold_i <- getNodeSet(non_derivative_table[[i]], c('nonDerivativeTransaction', 'nonDerivativeHolding'))
+            part <- get_table_footnotes_df(non_deriv_tranhold_i)
+            if(nrow(part)) {
+
+                part$tab_index <- i
+                non_deriv_tranhold_df <- bind_rows(non_deriv_tranhold_df, part)
+
+            }
+
+        }
+
         full_df <- bind_rows(non_deriv_sec_df, non_deriv_tranhold_df)
 
     } else {
@@ -964,8 +991,8 @@ get_nonDerivativeTable_footnotes <- function(xml_root) {
 
 get_full_footnote_indices <- function(xml_root, file_name, document) {
 
-    full_df <- data.frame(matrix(nrow = 0, ncol = 6))
-    colnames(full_df) <- c('file_name', 'document', 'table', 'seq', 'footnote_variable', 'footnote_index')
+    full_df <- data.frame(matrix(nrow = 0, ncol = 7))
+    colnames(full_df) <- c('file_name', 'document', 'table', 'tab_index', 'seq', 'footnote_variable', 'footnote_index')
 
     header <- get_header_footnotes(xml_root)
     non_deriv <- get_nonDerivativeTable_footnotes(xml_root)
@@ -1000,7 +1027,7 @@ get_full_footnote_indices <- function(xml_root, file_name, document) {
 
     }
 
-    full_df <- full_df[, c('file_name', 'document', 'table', 'seq', 'footnote_variable', 'footnote_index')]
+    full_df <- full_df[, c('file_name', 'document', 'table', 'tab_index', 'seq', 'footnote_variable', 'footnote_index')]
 
     return(full_df)
 
