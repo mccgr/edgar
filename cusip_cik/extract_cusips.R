@@ -19,6 +19,7 @@ if (!dbExistsTable(pg, c("edgar", "cusip_cik"))) {
         GRANT SELECT ON TABLE edgar.cusip_cik TO edgar_access;
         ALTER TABLE edgar.cusip_cik OWNER TO edgar;
 
+        CREATE INDEX ON edgar.cusip_cik (file_name);
         CREATE INDEX ON edgar.cusip_cik (cusip);
         CREATE INDEX ON edgar.cusip_cik (cik);")
 }
@@ -30,15 +31,23 @@ rs <- dbDisconnect(pg)
 get_filing_list <- function(num_files = Inf) {
     pg <- dbConnect(RPostgreSQL::PostgreSQL())
 
-    dbGetQuery(pg, "SET work_mem='2GB'")
-    filings <- tbl(pg, sql("SELECT * FROM edgar.filings"))
-    cusip_cik <- tbl(pg, sql("SELECT * FROM edgar.cusip_cik"))
+    dbExecute(pg, "SET work_mem='2GB'")
+    dbExecute(pg, "SET search_path TO edgar, public")
+    filings <- tbl(pg, "filings")
+    filing_docs <- tbl(pg, "filing_docs")
+    cusip_cik <- tbl(pg, "cusip_cik")
+
+    html_filings <-
+        filing_docs %>%
+        filter(document %~% '.htm$')
 
     file_list <-
         filings %>%
         filter(form_type %in% c('SC 13G', 'SC 13G/A', 'SC 13D', 'SC 13D/A')) %>%
         anti_join(cusip_cik, by="file_name") %>%
-        collect(n = num_files)
+        left_join(html_filings, by = "file_name")
+    file_list
+    collect(n = num_files)
 
     rs <- dbDisconnect(pg)
     return(file_list)
