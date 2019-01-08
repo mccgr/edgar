@@ -1,15 +1,16 @@
-library(RPostgreSQL)
+library(DBI)
 library(dplyr, warn.conflicts = FALSE)
 library(tools)
 
 # Functions ----
 get_file_list <- function(num_files = Inf, form_types = NULL) {
 
-    pg <- dbConnect(PostgreSQL())
+    pg <- dbConnect(RPostgreSQL::PostgreSQL())
 
-    filings <- tbl(pg, sql("SELECT * FROM edgar.filings"))
-    filing_docs  <- tbl(pg, sql("SELECT * FROM edgar.filing_docs"))
-    filing_docs_processed <- tbl(pg, sql("SELECT * FROM edgar.filing_docs_processed"))
+    rs <- dbExecute(pg, "SET search_path TO edgar, public")
+
+    filings <- tbl(pg, "filings")
+    filing_docs  <- tbl(pg, "filing_docs")
 
     if (is.null(form_types)) {
         filing_docs_to_get <- filing_docs
@@ -25,8 +26,10 @@ get_file_list <- function(num_files = Inf, form_types = NULL) {
         file.path(url, document)
     }
 
-    new_table <- !dbExistsTable(pg, c("edgar", "filing_docs_processed"))
+    new_table <- !dbExistsTable(pg, "filing_docs_processed")
+
     if (!new_table) {
+        filing_docs_processed <- tbl(pg, "filing_docs_processed")
         files <-
             filing_docs_to_get  %>%
             anti_join(filing_docs_processed)
@@ -45,23 +48,28 @@ get_file_list <- function(num_files = Inf, form_types = NULL) {
     return(files)
 }
 
-get_filing_file_list <- function(file_name, num_files = Inf) {
+get_filing_file_list <- function(num_files = Inf) {
 
-    pg <- dbConnect(PostgreSQL())
+    pg <- dbConnect(RPostgreSQL::PostgreSQL())
 
-    filing_docs  <- tbl(pg, sql(paste0("SELECT * FROM edgar.filing_docs WHERE file_name = '", file_name, "'")))
-    filing_docs_processed <- tbl(pg, sql(paste0("SELECT * FROM edgar.filing_docs_processed WHERE file_name = '", file_name, "'")))
+    rs <- dbExecute(pg, "SET search_path TO edgar, public")
+
+    filing_docs <- tbl(pg, "filing_docs")
 
     get_file_path <- function(file_name, document) {
         url <- gsub("(\\d{10})-(\\d{2})-(\\d{6})\\.txt", "\\1\\2\\3", file_name)
         file.path(url, document)
     }
 
-    new_table <- !dbExistsTable(pg, c("edgar", "filing_docs_processed"))
+    new_table <- !dbExistsTable(pg, "filing_docs_processed")
     if (!new_table) {
+
+        filing_docs_processed <- tbl(pg, "filing_docs_processed")
+
         files <-
             filing_docs  %>%
             anti_join(filing_docs_processed)
+
     } else {
         files <- filing_docs
     }
@@ -74,7 +82,7 @@ get_filing_file_list <- function(file_name, num_files = Inf) {
 
     dbDisconnect(pg)
 
-    return(files)
+    files
 }
 
 get_filing_docs <- function(path) {
@@ -95,14 +103,12 @@ get_filing_docs <- function(path) {
 }
 
 
+download_filing_files <- function(max_files = Inf) {
 
-download_filing_files <- function(file_name, max_files = Inf) {
-
-
-    pg <- dbConnect(PostgreSQL())
+    pg <- dbConnect(RPostgreSQL::PostgreSQL())
     new_table <- !dbExistsTable(pg, c("edgar", "filing_docs_processed"))
     dbDisconnect(pg)
-    while (nrow(files <- get_filing_file_list(file_name, num_files = max_files))>0) {
+    while (nrow(files <- get_filing_file_list(num_files = max_files))>0) {
         print("Getting files...")
         st <- system.time(files$downloaded <-
                               unlist(lapply(files$html_link, get_filing_docs)))
@@ -115,22 +121,18 @@ download_filing_files <- function(file_name, max_files = Inf) {
             select(file_name, document, downloaded)
 
         pg <- dbConnect(PostgreSQL())
-        dbWriteTable(pg, c("edgar", "filing_docs_processed"), downloaded_files,
+        rs <- dbExecute(pg, "SET search_path TO edgar, public")
+        dbWriteTable(pg, "filing_docs_processed", downloaded_files,
                      append = !new_table,
                      row.names = FALSE)
         if (new_table) {
-            dbGetQuery(pg, "CREATE INDEX ON edgar.filing_docs_processed (file_name)")
-            dbGetQuery(pg, "ALTER TABLE edgar.filing_docs_processed OWNER TO edgar")
-            dbGetQuery(pg, "GRANT SELECT ON TABLE edgar.filing_docs_processed TO edgar_access")
+            dbGetQuery(pg, "CREATE INDEX ON filing_docs_processed (file_name)")
+            dbGetQuery(pg, "ALTER TABLE filing_docs_processed OWNER TO edgar")
+            dbGetQuery(pg, "GRANT SELECT ON TABLE filing_docs_processed TO edgar_access")
             new_table <- FALSE
         }
         dbDisconnect(pg)
-
-
-
-
-}
-
+    }
 }
 
 # Run code ----
@@ -138,12 +140,14 @@ library(parallel)
 
 raw_directory <- Sys.getenv("EDGAR_DIR")
 
+pg <- dbConnect(RPostgreSQL::PostgreSQL())
 new_table <- !dbExistsTable(pg, c("edgar", "filing_docs_processed"))
-while (nrow(files <- get_file_list(num_files = Inf, form_types = "8-K"))>0) {
+rs <- dbDisconnect(pg)
+while (nrow(files <- get_file_list(num_files = 100,
+                                   form_types = c("SC 13D", "SC 13G")))>0) {
     print("Getting files...")
     st <- system.time(files$downloaded <-
-                    unlist(mclapply(files$html_link, get_filing_docs,
-                                mc.cores=24)))
+                    unlist(lapply(files$html_link, get_filing_docs)))
 
     print(sprintf("Downloaded %d files in %3.2f seconds",
                   nrow(files), st[["elapsed"]]))
@@ -152,14 +156,15 @@ while (nrow(files <- get_file_list(num_files = Inf, form_types = "8-K"))>0) {
         files %>%
         select(file_name, document, downloaded)
 
-    pg <- dbConnect(PostgreSQL())
-    dbWriteTable(pg, c("edgar", "filing_docs_processed"), downloaded_files,
+    pg <- dbConnect(RPostgreSQL::PostgreSQL())
+    rs <- dbExecute(pg, "SET search_path TO edgar, public")
+    dbWriteTable(pg, "filing_docs_processed", downloaded_files,
              append = !new_table,
              row.names = FALSE)
     if (new_table) {
-        dbGetQuery(pg, "CREATE INDEX ON edgar.filing_docs_processed (file_name)")
-        dbGetQuery(pg, "ALTER TABLE edgar.filing_docs_processed OWNER TO edgar")
-        dbGetQuery(pg, "GRANT SELECT ON TABLE edgar.filing_docs_processed TO edgar_access")
+        dbGetQuery(pg, "CREATE INDEX ON filing_docs_processed (file_name)")
+        dbGetQuery(pg, "ALTER TABLE filing_docs_processed OWNER TO edgar")
+        dbGetQuery(pg, "GRANT SELECT ON TABLE filing_docs_processed TO edgar_access")
         new_table <- FALSE
     }
     dbDisconnect(pg)
