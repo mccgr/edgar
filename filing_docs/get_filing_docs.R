@@ -33,7 +33,7 @@ get_filing_docs <- function(file_name) {
      } else {
 
          df <-
-             table_nodes %>%
+             table_nodes[1] %>%
              html_table() %>%
              bind_rows() %>%
              fix_names() %>%
@@ -65,7 +65,7 @@ get_file_names <- function() {
     def14_a %>%
     select(file_name) %>%
     distinct() %>%
-    collect(n = 100)
+    collect(n = 1000)
 
 }
 
