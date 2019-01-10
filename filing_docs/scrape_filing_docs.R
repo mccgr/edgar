@@ -4,10 +4,50 @@ library(DBI)
 library(rvest, quietly = TRUE)
 source('filing_docs/scrape_filing_doc_functions.R')
 
+fix_names <- function(df) {
+    colnames(df) <- tolower(colnames(df))
+    df
+}
+
+get_filing_docs <- function(file_name) {
+
+     head_url <- get_index_url(file_name)
+
+     html <- try(read_html(head_url, encoding="Latin1"))
+
+     if (inherits(html, "try-error")) {
+
+         df <- tibble(seq = NA, description = NA, document = NA, type = NA,
+                      size = NA, file_name = file_name)
+         return(df)
+     }
+
+     table_nodes <-
+         read_html(head_url, encoding="Latin1") %>%
+         html_nodes("table")
+
+     if (length(table_nodes) < 1) {
+         df <- tibble(seq = NA, description = NA, document = NA, type = NA,
+                      size = NA, file_name = file_name)
+     } else {
+
+         df <-
+             table_nodes[1] %>%
+             html_table() %>%
+             bind_rows() %>%
+             fix_names() %>%
+             mutate(file_name = file_name,
+                    type = as.character(type))
+         df
+     }
+
+    df
+}
+
 pg <- dbConnect(RPostgres::Postgres())
 
-rs <- dbExecute(pg, "SET work_mem = '5GB'")
 rs <- dbExecute(pg, "SET search_path TO edgar, public")
+rs <- dbExecute(pg, "SET work_mem = '5GB'")
 
 filings <- tbl(pg, "filings")
 
