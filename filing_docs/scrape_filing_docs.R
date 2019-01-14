@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 library(dplyr, warn.conflicts = FALSE)
-library(RPostgreSQL, quietly = TRUE)
+library(DBI)
 library(rvest, quietly = TRUE)
 
 get_index_url <- function(file_name) {
@@ -24,12 +24,15 @@ get_filing_docs <- function(file_name) {
      head_url <- get_index_url(file_name)
 
      table_nodes <-
-         read_html(head_url, encoding="Latin1") %>%
-         html_nodes("table")
+         try({
+             read_html(head_url, encoding="Latin1") %>%
+                 html_nodes("table")
+         })
 
-     if (length(table_nodes) < 1) {
+     if (length(table_nodes) < 1 | is(table_nodes, "try-error")) {
          df <- tibble(seq = NA, description = NA, document = NA, type = NA,
                       size = NA, file_name = file_name)
+         return(df)
      } else {
 
          df <-
@@ -45,28 +48,28 @@ get_filing_docs <- function(file_name) {
     df
 }
 
-pg <- dbConnect(PostgreSQL())
+pg <- dbConnect(RPostgres::Postgres())
 
-filings <- tbl(pg, sql("SELECT * FROM edgar.filings"))
+rs <- dbExecute(pg, "SET work_mem = '5GB'")
+rs <- dbExecute(pg, "SET search_path TO edgar, public")
+
+filings <- tbl(pg, "filings")
 
 def14_a <-
     filings %>%
-    filter(form_type %~% "^(10-K|SC 13[DG](/A)?|DEF 14|8-K|6-K|13|[345](/A)?$)")
+    # filter(form_type %~% "^(10-[QK]|SC 13[DG](/A)?|DEF 14|8-K|6-K|13|[345](/A)?$)") %>%
+    select(file_name)
 
-new_table <- !dbExistsTable(pg, c("edgar", "filing_docs"))
+new_table <- !dbExistsTable(pg, "filing_docs")
 
 if (!new_table) {
-    filing_docs <- tbl(pg, sql("SELECT * FROM edgar.filing_docs"))
+    filing_docs <- tbl(pg, "filing_docs")
     def14_a <- def14_a %>% anti_join(filing_docs, by = "file_name")
 }
 
 get_file_names <- function() {
-
     def14_a %>%
-    select(file_name) %>%
-    distinct() %>%
     collect(n = 1000)
-
 }
 
 library(parallel)
@@ -81,7 +84,7 @@ while(nrow(file_names <- get_file_names()) > 0) {
 
         if (nrow(df) > 0) {
             cat("Writing data ...\n")
-            dbWriteTable(pg, c("edgar", "filing_docs"),
+            dbWriteTable(pg, "filing_docs",
                          df, append = TRUE, row.names = FALSE)
 
         } else {
@@ -91,10 +94,12 @@ while(nrow(file_names <- get_file_names()) > 0) {
 }
 
 if (new_table) {
-    pg <- dbConnect(PostgreSQL())
-    rs <- dbExecute(pg, "CREATE INDEX ON edgar.filing_docs (file_name)")
-    rs <- dbExecute(pg, "ALTER TABLE edgar.filing_docs OWNER TO edgar")
-    rs <- dbExecute(pg, "GRANT SELECT ON TABLE edgar.filing_docs TO edgar_access")
+    pg <- dbConnect(RPostgres::Postgres())
+
+    rs <- dbExecute(pg, "SET search_path TO edgar, public")
+    rs <- dbExecute(pg, "CREATE INDEX ON filing_docs (file_name)")
+    rs <- dbExecute(pg, "ALTER TABLE filing_docs OWNER TO edgar")
+    rs <- dbExecute(pg, "GRANT SELECT ON TABLE filing_docs TO edgar_access")
 
     rs <- dbDisconnect(pg)
 }
