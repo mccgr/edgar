@@ -35,7 +35,7 @@ get_345_xml_docs <- function(num_docs = Inf) {
     pg <- dbConnect(PostgreSQL())
 
 
-    xml_full_set <- tbl(pg, sql("SELECT file_name, document, type AS form_type FROM edgar.filing_docs WHERE type IN ('3', '4', '5')")) %>% filter(document %~% "xml$")
+    xml_full_set <- tbl(pg, sql("SELECT file_name, document, type AS form_type FROM edgar.filing_docs WHERE type IN ('3', '4', '5', '3/A', '4/A', '5/A')")) %>% filter(document %~% "xml$")
 
     new_table <- !dbExistsTable(pg, c("edgar", "forms345_xml_fully_processed"))
 
@@ -71,7 +71,7 @@ table_list <- c('forms345_header', 'forms345_reporting_owners', 'forms345_table1
 
 pg <- dbConnect(PostgreSQL())
 
-form345_xml_docs_to_process <- get_345_xml_docs(num_docs = 1000000)
+form345_xml_docs_to_process <- get_345_xml_docs()
 
 new_table <- !dbExistsTable(pg, c("edgar", "forms345_xml_fully_processed"))
 
