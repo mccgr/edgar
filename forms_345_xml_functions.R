@@ -1253,7 +1253,7 @@ delete_345_data <- function(file_name, document) {
 
     for(table_name in table_list) {
 
-    query <- paste0("DELETE FROM edgar.", table_name, " WHERE file_name = ", file_name, " AND document = ", document)
+    query <- paste0("DELETE FROM edgar.", table_name, " WHERE file_name = '", file_name, "' AND document = '", document, "'")
     dbGetQuery(pg, query)
 
     }
