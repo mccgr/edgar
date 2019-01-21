@@ -174,6 +174,6 @@ See [here](filing_docs.md). Code: [`get_filing_docs.R`](get_filing_docs.R).
 
 - [`get_form_345_filing_docs.R`](get_form_345_filing_docs.R): This program scrapes the metadata for filings from `edgar.filings` with the `type` being equal to `3`, `4`, `5`, `3/A`, `4/A` or `5/A`, and writes the subsequent data to `edgar.filing_docs`.
 
-- [`forms345_xml_functions.R`](forms345_xml_functions.R): This file is a repository of functions which are used to download and scrape the xml files for Forms 3, 4, and 5 (as well as their amendments), and also functions to to write the scraped data to the tables above. This file gets `sourced` by other programs.
+- [`forms345_xml_functions.R`](forms345_xml_functions.R): This file is a repository of functions which are used to download and scrape the xml files for Forms 3, 4, and 5 (as well as their amendments), and also functions to write the scraped data to the tables above. This file gets `sourced` by other programs. 
 
-- [`process_345_xml_documents.R`](process_345_xml_documents.R): This program gets the rows from `edgar.filing_docs` which correspond to the xml files of Forms 3, 4 and 5 (as well as their amendments), and then scrapes the data from the xml files and
+- [`process_345_xml_documents.R`](process_345_xml_documents.R): This program gets the rows from `edgar.filing_docs` which correspond to the xml files of Forms 3, 4 and 5 (as well as their amendments), and then scrapes the data from the xml files and writes them to the tables `forms345_header`, `forms345_table1`, `forms345_table2`, `forms345_footnotes`, `forms345_footnote_indices`, `forms345_reporting_owners`, `forms345_signatures`, `forms345_xml_process_table`, and `forms345_xml_fully_processed`.
