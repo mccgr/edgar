@@ -3,6 +3,7 @@ library(dplyr, warn.conflicts = FALSE)
 library(RPostgreSQL, quietly = TRUE)
 library(rvest, quietly = TRUE)
 library(parallel)
+library(readr)
 
 get_index_url <- function(file_name) {
     matches <- stringr::str_match(file_name, "/(\\d+)/(\\d{10}-\\d{2}-\\d{6})")
@@ -15,24 +16,40 @@ get_index_url <- function(file_name) {
     return(url)
 }
 
-get_filing_docs <- function(file_name) {
 
-    try({head_url <- get_index_url(file_name)
+filing_docs_df <- function(file_name) {
+
+    head_url <- get_index_url(file_name)
 
     table_nodes <-
         read_html(head_url, encoding="Latin1") %>%
         html_nodes("table")
 
-    if (length(table_nodes) < 1) {
+    filing_doc_table_indices <- which(table_nodes %>% html_attr("class") == "tableFile")
+
+    file_tables <- table_nodes[filing_doc_table_indices]
+
+    if (length(file_tables) < 1) {
         df <- tibble(seq = NA, description = NA, document = NA, type = NA,
                      size = NA, file_name = file_name)
     } else {
 
-        df <- table_nodes %>% html_table() %>% bind_rows() %>% fix_names() %>% mutate(file_name = file_name, type = as.character(type))
+        df <- file_tables %>% html_table() %>% bind_rows() %>% fix_names() %>% mutate(file_name = file_name, type = as.character(type))
 
         colnames(df) <- tolower(colnames(df))
     }
 
+
+    return(df)
+
+}
+
+
+get_filing_docs <- function(file_name) {
+
+    try({
+
+    df <- filing_docs_df(file_name)
     pg <- dbConnect(PostgreSQL())
     dbWriteTable(pg, c("edgar", "filing_docs"),
                  df, append = TRUE, row.names = FALSE)
