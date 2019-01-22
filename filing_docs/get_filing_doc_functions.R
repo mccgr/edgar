@@ -16,32 +16,35 @@ get_index_url <- function(file_name) {
     return(url)
 }
 
-
 filing_docs_df <- function(file_name) {
 
     head_url <- get_index_url(file_name)
 
     table_nodes <-
-        read_html(head_url, encoding="Latin1") %>%
-        html_nodes("table")
+        try({
+            read_html(head_url, encoding="Latin1") %>%
+                html_nodes("table")
+        })
 
-    filing_doc_table_indices <- which(table_nodes %>% html_attr("class") == "tableFile")
-
-    file_tables <- table_nodes[filing_doc_table_indices]
-
-    if (length(file_tables) < 1) {
+    if (length(table_nodes) < 1 | is(table_nodes, "try-error")) {
         df <- tibble(seq = NA, description = NA, document = NA, type = NA,
                      size = NA, file_name = file_name)
+        return(df)
     } else {
+        filing_doc_table_indices <- which(table_nodes %>% html_attr("class") == "tableFile")
 
-        df <- file_tables %>% html_table() %>% bind_rows() %>% fix_names() %>% mutate(file_name = file_name, type = as.character(type))
+        file_tables <- table_nodes[filing_doc_table_indices]
+        df <-
+            file_tables %>%
+            html_table() %>%
+            bind_rows() %>%
+            fix_names() %>%
+            mutate(file_name = file_name, type = as.character(type))
 
         colnames(df) <- tolower(colnames(df))
     }
 
-
     return(df)
-
 }
 
 
