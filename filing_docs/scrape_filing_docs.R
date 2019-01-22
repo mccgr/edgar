@@ -2,7 +2,7 @@
 library(dplyr, warn.conflicts = FALSE)
 library(DBI)
 library(rvest, quietly = TRUE)
-source('filing_docs/get_filing_doc_functions.R')
+source('filing_docs/scrape_filing_doc_functions.R')
 
 pg <- dbConnect(RPostgres::Postgres())
 
