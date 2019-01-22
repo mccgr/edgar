@@ -2,7 +2,7 @@
 library(dplyr, warn.conflicts = FALSE)
 library(RPostgreSQL, quietly = TRUE)
 library(rvest, quietly = TRUE)
-source("~/edgar/get_filing_doc_functions.R")
+source("~/edgar/filing_docs/get_filing_doc_functions.R")
 
 fil345_regex <- "^(10-K|DEF 14|8-K|6-K|13|[345](/A)?)$"
 
