@@ -4,6 +4,8 @@ library(rjson)
 library(RCurl)
 library(dplyr)
 library(lubridate)
+library(rvest)
+source('filing_docs/get_filing_doc_functions.R')
 
 
 xml_url_to_json <- function(url) {
@@ -33,6 +35,28 @@ get_xml_root <- function(file_name, document) {
 
     try({url <- get_filing_document_url(file_name, document)
     fileURL <- file.path(url)
+    xml_parse <- xmlParse(getURL(fileURL))
+    xml_root <- xmlRoot(xml_parse)
+    return(xml_root)}, return(NA))
+}
+
+get_filing_doc_html_link <- function(file_name, document) {
+
+    head_url <- get_index_url(file_name)
+    table <- read_html(head_url, encoding="Latin1") %>% html_nodes("table") %>% .[[1]]
+    table_df <- table %>% html_table()
+    doc_index <- which(table_df$Document == document)
+    doc_stem <- table %>% html_nodes('tr') %>% html_nodes('a') %>% .[[doc_index]] %>% html_attr("href")
+    doc_url <- paste0("https://www.sec.gov", doc_stem)
+
+    return(doc_url)
+
+}
+
+
+get_xml_root_by_url <- function(url) {
+
+    try({fileURL <- file.path(url)
     xml_parse <- xmlParse(getURL(fileURL))
     xml_root <- xmlRoot(xml_parse)
     return(xml_root)}, return(NA))
@@ -1262,3 +1286,237 @@ delete_345_data <- function(file_name, document) {
 
 }
 
+
+process_345_filing_alt <- function(file_name, document, form_type, doc_url) {
+
+    pg <- dbConnect(PostgreSQL())
+
+    try({
+
+        try({
+            xml_root <- get_xml_root_by_url(doc_url)
+            got_xml <- TRUE}, {got_xml <- FALSE})
+
+        try({
+            header <- get_header(xml_root, file_name, document)
+            got_header <- TRUE}, {got_header <- FALSE})
+
+        try({
+            rep_own <- get_rep_owner_details_df(xml_root, file_name, document)
+            got_rep_own <- TRUE}, {got_rep_own <- FALSE})
+
+        try({
+            table1 <- get_nonDerivative_df(xml_root, file_name, document, form_type)
+            got_table1 <- TRUE}, {got_table1 <- FALSE})
+
+        try({non_derivative_table <- getNodeSet(xml_root, 'nonDerivativeTable')
+        num_non_derivative_tables <- length(non_derivative_table)
+
+        num_non_derivative_tran <- 0
+        num_non_derivative_hold <- 0
+
+        if(num_non_derivative_tables) {
+
+            for(i in 1:num_non_derivative_tables) {
+                num_tran_i <- length(getNodeSet(non_derivative_table[[i]], 'nonDerivativeTransaction'))
+                num_hold_i <- length(getNodeSet(non_derivative_table[[i]], 'nonDerivativeHolding'))
+                num_non_derivative_tran <- num_non_derivative_tran + num_tran_i
+                num_non_derivative_hold <- num_non_derivative_hold + num_hold_i
+            }
+
+        }
+
+        num_non_derivative_sec <- length(getNodeSet(xml_root, 'nonDerivativeSecurity'))
+
+        total_non_derivative_nodes <- num_non_derivative_tran + num_non_derivative_hold + num_non_derivative_sec
+        }, {num_non_derivative_tables <- NA; num_non_derivative_tran <- NA; num_non_derivative_hold <- NA;
+        num_non_derivative_sec <- NA; total_non_derivative_nodes <- NA})
+
+        try({
+            table2 <- get_derivative_df(xml_root, file_name, document, form_type)
+            got_table2 <- TRUE}, {got_table2 <- FALSE})
+
+        try({derivative_table <- getNodeSet(xml_root, 'derivativeTable')
+        num_derivative_tables <- length(derivative_table)
+
+        num_derivative_tran <- 0
+        num_derivative_hold <- 0
+
+        if(num_derivative_tables) {
+
+            for(i in 1:num_derivative_tables) {
+                num_tran_i <- length(getNodeSet(derivative_table[[i]], 'derivativeTransaction'))
+                num_hold_i <- length(getNodeSet(derivative_table[[i]], 'derivativeHolding'))
+                num_derivative_tran <- num_derivative_tran + num_tran_i
+                num_derivative_hold <- num_derivative_hold + num_hold_i
+            }
+        }
+
+        num_derivative_sec <- length(getNodeSet(xml_root, 'derivativeSecurity'))
+
+        total_derivative_nodes <- num_derivative_tran + num_derivative_hold + num_derivative_sec
+        }, {num_derivative_tables <- NA; num_derivative_tran <- NA; num_derivative_hold <- NA;
+        num_derivative_sec <- NA; total_derivative_nodes <- NA})
+
+        try({
+            footnotes <- get_footnotes(xml_root, file_name, document)
+            got_footnotes <- TRUE}, {got_footnotes <- FALSE})
+
+        try({
+            footnote_indices <- get_full_footnote_indices(xml_root, file_name, document)
+            got_footnote_indices <- TRUE}, {got_footnote_indices <- FALSE})
+
+        try({
+            signatures <- get_signature_df(xml_root, file_name, document)
+            got_signatures <- TRUE}, {got_signatures <- FALSE})
+
+        if(got_header) {
+
+            try({
+                if(nrow(header)) {
+                    dbWriteTable(pg, c("edgar", "forms345_header"), header, append = TRUE, row.names = FALSE)
+                }
+                wrote_header <- TRUE}, {wrote_header <- FALSE})
+
+        } else {
+
+            wrote_header <- FALSE
+
+        }
+
+        if(got_rep_own) {
+
+            try({
+                if(nrow(rep_own)) {
+                    dbWriteTable(pg, c("edgar", "forms345_reporting_owners"), rep_own, append = TRUE, row.names = FALSE)
+                }
+                wrote_rep_own <- TRUE}, {wrote_rep_own <- FALSE})
+
+        } else {
+
+            wrote_rep_own <- FALSE
+
+        }
+
+        if(got_table1) {
+
+            try({
+                if(nrow(table1)) {
+                    dbWriteTable(pg, c("edgar", "forms345_table1"), table1, append = TRUE, row.names = FALSE)
+                }
+                wrote_table1 <- TRUE}, {wrote_table1 <- FALSE})
+
+        } else {
+
+            wrote_table1 <- FALSE
+
+        }
+
+        if(got_table2) {
+
+            try({
+                if(nrow(table2)) {
+                    dbWriteTable(pg, c("edgar", "forms345_table2"), table2, append = TRUE, row.names = FALSE)
+                }
+                wrote_table2 <- TRUE}, {wrote_table2 <- FALSE})
+
+        } else {
+
+            wrote_table2 <- FALSE
+
+        }
+
+        if(got_footnotes) {
+
+            try({
+                if(nrow(footnotes)) {
+                    dbWriteTable(pg, c("edgar", "forms345_footnotes"), footnotes, append = TRUE, row.names = FALSE)
+                }
+                wrote_footnotes <- TRUE}, {wrote_footnotes <- FALSE})
+
+        } else {
+
+            wrote_footnotes <- FALSE
+
+        }
+
+        if(got_footnote_indices) {
+
+            try({
+                if(nrow(footnote_indices)){
+                    dbWriteTable(pg, c("edgar", "forms345_footnote_indices"), footnote_indices, append = TRUE, row.names = FALSE)
+                }
+                wrote_footnote_indices <- TRUE}, {wrote_footnote_indices <- FALSE})
+
+        } else {
+
+            wrote_footnote_indices <- FALSE
+
+        }
+
+        if(got_signatures) {
+
+            try({
+                if(nrow(signatures)){
+                    dbWriteTable(pg, c("edgar", "forms345_signatures"), signatures, append = TRUE, row.names = FALSE)
+                }
+                wrote_signatures <- TRUE}, {wrote_signatures <- FALSE})
+
+        } else {
+
+            wrote_signatures <- FALSE
+
+        }
+
+
+        process_df <- data.frame(file_name = file_name, document = document, form_type = form_type, got_xml = got_xml,
+                                 got_header = got_header, got_rep_own = got_rep_own, got_table1 = got_table1,
+                                 num_non_derivative_tables = num_non_derivative_tables,
+                                 num_non_derivative_tran = num_non_derivative_tran, num_non_derivative_hold = num_non_derivative_hold,
+                                 num_non_derivative_sec = num_non_derivative_sec, total_non_derivative_nodes = total_non_derivative_nodes,
+                                 got_table2 = got_table2, num_derivative_tables = num_derivative_tables,
+                                 num_derivative_tran = num_derivative_tran, num_derivative_hold = num_derivative_hold,
+                                 num_derivative_sec= num_derivative_sec, total_derivative_nodes = total_derivative_nodes,
+                                 got_footnotes = got_footnotes, got_footnote_indices = got_footnote_indices,
+                                 got_signatures = got_signatures, wrote_header = wrote_header, wrote_rep_own = wrote_rep_own,
+                                 wrote_table1 = wrote_table1, wrote_table2 = wrote_table2, wrote_footnotes = wrote_footnotes,
+                                 wrote_footnote_indices = wrote_footnote_indices, wrote_signatures = wrote_signatures,
+                                 stringsAsFactors = FALSE)
+
+        dbWriteTable(pg, c("edgar", "forms345_xml_process_table"), process_df, append = TRUE, row.names = FALSE)
+
+        fully_processed <- TRUE
+
+    }, {fully_processed <- FALSE})
+
+    dbDisconnect(pg)
+
+    return(fully_processed)
+
+}
+
+
+
+update_xml_fully_processed <- function(file_name, document, processed) {
+
+    pg <- dbConnect(PostgreSQL())
+
+
+    query_pt1 <- "UPDATE TABLE edgar.forms345_xml_fully_processed "
+    query_pt2 <- paste0("SET fully_processed = ", as.character(processed), " ")
+    query_pt3 <- paste0("WHERE file_name = ", file_name, " AND document = ", document)
+    full_query <- paste0(query_pt1, query_pt2, query_pt3)
+
+    result <- try(dbExecute(pg, full_query))
+
+    if(!inherits(result, "try-error")) {
+        success <- (result > 0)
+    } else {
+        success <- FALSE
+    }
+
+    dbDisconnect(pg)
+
+    return(success)
+
+}
