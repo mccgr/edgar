@@ -5,7 +5,7 @@ library(RCurl)
 library(dplyr)
 library(lubridate)
 library(rvest)
-source('filing_docs/get_filing_doc_functions.R')
+source('~/edgar/filing_docs/get_filing_doc_functions.R')
 
 
 xml_url_to_json <- function(url) {
