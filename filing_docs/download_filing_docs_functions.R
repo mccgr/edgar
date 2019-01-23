@@ -53,6 +53,27 @@ get_filing_docs <- function(path) {
     return(file.exists(local_filename))
 }
 
+download_exceptional_filing_document <- function(file_name, document, html_link) {
+
+    path <- get_file_path(file_name, document)
+
+    local_filename <- file.path(raw_directory, path)
+
+    #     print(path[!file.exists(local_filename) & !is.na(path)])
+    link <- file.path("https://www.sec.gov/Archives", path)
+    dir.create(dirname(local_filename), showWarnings=FALSE, recursive=TRUE)
+
+    # Only download the file if we don't already have a local copy
+    if (!file.exists(local_filename)) {
+        try(download.file(url=html_link, destfile=local_filename, quiet=TRUE))
+    }
+
+    # Return the local filename if the file exists
+    return(file.exists(local_filename))
+
+
+}
+
 browse_filing_doc <- function(path) {
 
     local_filename <- file.path(raw_directory, path)
