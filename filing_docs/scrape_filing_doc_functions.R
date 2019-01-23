@@ -47,6 +47,41 @@ filing_docs_df <- function(file_name) {
     return(df)
 }
 
+filing_docs_df_with_href <- function(file_name) {
+
+    head_url <- get_index_url(file_name)
+
+    table_nodes <-
+        read_html(head_url, encoding="Latin1") %>%
+        html_nodes("table")
+
+    filing_doc_table_indices <- which(table_nodes %>% html_attr("class") == "tableFile")
+
+    file_tables <- table_nodes[filing_doc_table_indices]
+
+    if (length(file_tables) < 1) {
+        df <- tibble(seq = NA, description = NA, document = NA, type = NA,
+                     size = NA, file_name = file_name)
+    } else {
+
+        df <- file_tables %>% html_table() %>% bind_rows() %>% fix_names() %>% mutate(file_name = file_name, type = as.character(type))
+
+        colnames(df) <- tolower(colnames(df))
+
+        hrefs <- file_tables %>% html_nodes("tr") %>% html_nodes("a") %>% html_attr("href")
+
+        hrefs <- unlist(lapply(hrefs, function(x) {paste0('https://www.sec.gov', x)}))
+
+        df$html_link <- hrefs
+
+    }
+
+
+    return(df)
+
+}
+
+
 
 get_filing_docs <- function(file_name) {
 
