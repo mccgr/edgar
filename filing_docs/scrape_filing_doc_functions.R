@@ -16,8 +16,11 @@ get_index_url <- function(file_name) {
     return(url)
 }
 
-filing_docs_df <- function(file_name) {
+html_table_mod <- function(table) {
+    lapply(html_table(table), function(x) mutate(x, Type = as.character(Type)))
+}
 
+filing_docs_df <- function(file_name) {
     head_url <- get_index_url(file_name)
 
     table_nodes <-
@@ -36,10 +39,12 @@ filing_docs_df <- function(file_name) {
         file_tables <- table_nodes[filing_doc_table_indices]
         df <-
             file_tables %>%
-            html_table() %>%
+            html_table_mod() %>%
             bind_rows() %>%
             fix_names() %>%
-            mutate(file_name = file_name, type = as.character(type))
+            mutate(file_name = file_name,
+                   type = as.character(type),
+                   description = as.character(description))
 
         colnames(df) <- tolower(colnames(df))
     }
