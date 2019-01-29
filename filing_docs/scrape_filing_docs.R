@@ -65,15 +65,17 @@ if (!new_table) {
 
 get_file_names <- function() {
     def14_a %>%
-        collect(n = 100)
+        collect(n = 1000)
 }
 
 library(parallel)
 
 batch <- 0
+old <- now()
 while(nrow(file_names <- get_file_names()) > 0) {
     batch <- batch + 1
     cat("Processing batch", batch, "\n")
+
     temp <- mclapply(file_names$file_name, filing_docs_df, mc.cores = 6)
     if (length(temp) > 0) {
         df <- bind_rows(temp)
@@ -87,6 +89,8 @@ while(nrow(file_names <- get_file_names()) > 0) {
             cat("No data ...\n")
         }
     }
+    old <- new; new <- now()
+    cat(difftime(new, old, units = "secs"), "seconds\n")
 }
 
 if (new_table) {
