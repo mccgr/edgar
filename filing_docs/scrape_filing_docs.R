@@ -2,6 +2,7 @@
 library(dplyr, warn.conflicts = FALSE)
 library(DBI)
 library(rvest, quietly = TRUE)
+library(lubridate)
 source('filing_docs/scrape_filing_doc_functions.R')
 
 fix_names <- function(df) {
