@@ -3,7 +3,6 @@ library(dplyr, warn.conflicts = FALSE)
 library(RPostgreSQL, quietly = TRUE)
 library(rvest, quietly = TRUE)
 library(parallel)
-library(readr)
 
 get_index_url <- function(file_name) {
     matches <- stringr::str_match(file_name, "/(\\d+)/(\\d{10}-\\d{2}-\\d{6})")

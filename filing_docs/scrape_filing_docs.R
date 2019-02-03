@@ -52,7 +52,7 @@ rs <- dbExecute(pg, "SET work_mem = '5GB'")
 
 filings <- tbl(pg, "filings")
 
-def14_a <-
+file_names <-
     filings %>%
     # filter(form_type %~% "^(10-[QK]|SC 13[DG](/A)?|DEF 14|8-K|6-K|13|[345](/A)?$)") %>%
     select(file_name)
@@ -61,7 +61,9 @@ new_table <- !dbExistsTable(pg, "filing_docs")
 
 if (!new_table) {
     filing_docs <- tbl(pg, "filing_docs")
-    def14_a <- def14_a %>% anti_join(filing_docs, by = "file_name")
+    def14_a <- file_names %>% anti_join(filing_docs, by = "file_name")
+} else {
+    def14_a <- file_names
 }
 
 get_file_names <- function() {
@@ -72,7 +74,7 @@ get_file_names <- function() {
 library(parallel)
 
 batch <- 0
-old <- now()
+new <- now()
 while(nrow(file_names <- get_file_names()) > 0) {
     batch <- batch + 1
     cat("Processing batch", batch, "\n")
