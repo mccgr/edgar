@@ -2,7 +2,6 @@
 library(dplyr, warn.conflicts = FALSE)
 library(DBI)
 library(rvest, quietly = TRUE)
-library(lubridate)
 source('filing_docs/scrape_filing_doc_functions.R')
 
 fix_names <- function(df) {
@@ -74,7 +73,7 @@ get_file_names <- function() {
 library(parallel)
 
 batch <- 0
-new <- now()
+new <- lubridate::now()
 while(nrow(file_names <- get_file_names()) > 0) {
     batch <- batch + 1
     cat("Processing batch", batch, "\n")
@@ -92,8 +91,9 @@ while(nrow(file_names <- get_file_names()) > 0) {
             cat("No data ...\n")
         }
     }
-    old <- new; new <- now()
+    old <- new; new <- lubridate::now()
     cat(difftime(new, old, units = "secs"), "seconds\n")
+    temp <- unlist(temp)
 }
 
 if (new_table) {
@@ -106,5 +106,3 @@ if (new_table) {
 
     rs <- dbDisconnect(pg)
 }
-
-temp <- unlist(temp)
