@@ -15,7 +15,7 @@ As mentioned above, these are main tables indexing all the filings in the SEC ED
     - `date_filed`: the date the filing was made with the SEC.
     - `file_name`: This is the file name of the filing. This is an important field, as the file name uniquely assigned for each filing, and so can therefore identify each filing uniquely. This makes it important for joining with dependant tables, as they are often indexed, either partially or fully, by this file name.     
     
-* `filing_docs`: The fields are    
+* `filing_docs`: this is a table listing the documents associated with each filing that appears in `filings`. The code which maintains this table is contained in [`get_filing_docs.R`](get_filing_docs.R). See [here](filing_docs.md) for more information. The fields are    
 
     - `seq`: The sequence number, or ordinal number, of the document as it appears on the html page of the filing.
     - `description`: this is a description of what the document is.
@@ -25,14 +25,21 @@ As mentioned above, these are main tables indexing all the filings in the SEC ED
     - `file_name`: This is the same as in `filings`               
 
 
-## List of tables
+## Other central tables
 
-- `filings`: Index of all filings in the SEC EDGAR database (since 1993). Code: [`get_filings.R`](get_filings.R).
-- `accession_numbers`: Each filing has an accession number. This table contains these. Code: [`get_accession_nos.R`](get_accession_nos.R):
+* `accession_numbers`: Each filing has an accession number, contained in the `file_name` of the filing in `filings`. Each accession number contains three numbers: the first number is the CIK, the second is the year in which the filing was made, and the third is a sequential count of the number of filings made under the CIK (usually for the year, see [here](https://www.sec.gov/edgar/searchedgar/accessing-edgar-data.htm) for more detail). This table contains these. The code to make this table is in [`get_accession_nos.R`](get_accession_nos.R). The fields are:
+
+    - `file_name`: Same as in `filings`
+    - `accessionnumber`: the accession number, represented as a string. 
+
+
+
 - `cusip_cik`: Table mapping CUSIPs to CIKs. Data are scraped from `SC 13D` and `SC 13G` forms.
 - `filer_ciks`: Data on filer CIKs from `SC 13D` and `SC 13G` forms. Code: [`get_filer_ciks.R`](get_filer_ciks.R).
-- `filing_docs`: Table listing the documents associated with each filing. 
-See [here](filing_docs.md). Code: [`get_filing_docs.R`](get_filing_docs.R).
+
+
+
+
 - `item_no`: Table listing item numbers associated with each 8-K filing. 
 Code:  [`get_item_nos.R`](get_item_nos.R)
 - `item_no_desc`: Table providing explanations for each item number used in 8-K filings. Data extracted from [here](https://www.sec.gov/fast-answers/answersform8khtm.html). Code: [`get_item_no_desc.R`](get_item_no_desc.R) scrapes the descriptions for each of the unique item numbers stored in `item_no`. 
