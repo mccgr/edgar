@@ -10,7 +10,7 @@ As mentioned above, these are main tables indexing all the filings in the SEC ED
 * `filings`: This is an index of all filings in the SEC EDGAR database (since 1993). The program which constructs this table is contained in [`get_filings.R`](get_filings.R). The fields are
 
     - `company_name`: the name of the company/firm which made the filing.          
-    - `form_type`: the form type of the filing.
+    - `form_type`: the form type of the filing. A description of the existing form types can be found [here](https://www.sec.gov/info/edgar/forms/edgform.pdf).
     - `cik`: the Central Index Key (CIK) of the company/firm which made the filing. This index is very important, as each company/firm is assigned a unique CIK number, and it can thus be used to efficiently search for the filings of a particular company/firm on EDGAR.   
     - `date_filed`: the date the filing was made with the SEC.
     - `file_name`: This is the file name of the filing. This is an important field, as the file name uniquely assigned for each filing, and so can therefore identify each filing uniquely. This makes it important for joining with dependant tables, as they are often indexed, either partially or fully, by this file name.     
@@ -27,15 +27,28 @@ As mentioned above, these are main tables indexing all the filings in the SEC ED
 
 ## Other central tables
 
-* `accession_numbers`: Each filing has an accession number, contained in the `file_name` of the filing in `filings`. Each accession number contains three numbers: the first number is the CIK, the second is the year in which the filing was made, and the third is a sequential count of the number of filings made under the CIK (usually for the year, see [here](https://www.sec.gov/edgar/searchedgar/accessing-edgar-data.htm) for more detail). This table contains these. The code to make this table is in [`get_accession_nos.R`](get_accession_nos.R). The fields are:
+* `accession_numbers`: Each filing has an accession number, contained in the `file_name` of the filing in `filings`. Each accession number contains three numbers: the first number is the CIK, the second is the year in which the filing was made, and the third is a sequential count of the number of filings made under the CIK (usually for the year, see [here](https://www.sec.gov/edgar/searchedgar/accessing-edgar-data.htm) for more detail). This table contains these. The code to make this table is in [`get_accession_nos.R`](get_accession_nos.R). The fields are
 
     - `file_name`: Same as in `filings`
     - `accessionnumber`: the accession number, represented as a string. 
 
 
 
-- `cusip_cik`: Table mapping CUSIPs to CIKs. Data are scraped from `SC 13D` and `SC 13G` forms.
-- `filer_ciks`: Data on filer CIKs from `SC 13D` and `SC 13G` forms. Code: [`get_filer_ciks.R`](get_filer_ciks.R).
+* `cusip_cik`: CUSIP numbers are unique identifying numbers for North American securities, assigned by the Committee on Uniform Security Identification Procedures (CUSIP), hence the name. This table provides a mapping from CUSIPs to CIKs. The mapping is formed by scraping the CIK and CUSIP numbers for each company listed in forms `SC 13D` and `SC 13G`, and associating them. The fields are
+
+    - `file_name`: Same as in `filings`. In this case, this is the file name of the filing from which the data in the other fields was scraped.            
+    - `cusip`: the CUSIP number of the company.
+    - `cik`: The CIK number of the company. This is not necessary the same CIK as that contained in the `file_name`.
+    - `company_name`: The name of the company.
+    - `format`: A letter (usually 'A', 'B' or 'D') which keeps track of how the CUSIP number is displayed in the original filing document. 
+
+
+
+
+* `filer_ciks`: This table contains data on filer CIKs from `SC 13D` and `SC 13G` forms. The code which makes this table is contained in [`get_filer_ciks.R`](get_filer_ciks.R). The fields are
+
+    - `file_name`: Same as in `filings`, this case the file name of the particular `SC 13D` or `SC 13G` form.
+    - `filer_cik`: the CIK number of the filer
 
 
 
