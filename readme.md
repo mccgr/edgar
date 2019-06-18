@@ -53,9 +53,18 @@ As mentioned above, these are main tables indexing all the filings in the SEC ED
 
 
 
-- `item_no`: Table listing item numbers associated with each 8-K filing. 
-Code:  [`get_item_nos.R`](get_item_nos.R)
-- `item_no_desc`: Table providing explanations for each item number used in 8-K filings. Data extracted from [here](https://www.sec.gov/fast-answers/answersform8khtm.html). Code: [`get_item_no_desc.R`](get_item_no_desc.R) scrapes the descriptions for each of the unique item numbers stored in `item_no`. 
+* `item_no`: Table listing item numbers associated with each 8-K filing. The code to make and update this table is contained in [`get_item_nos.R`](get_item_nos.R). The fields are
+
+    - `file_name`: Same as in `filings`, this case the file name of the particular `8-K` or `8-K/A` form.
+    - `item_no`: the item number associated with the filing. If a filings has more than one item number, there will be multiple rows for the filings associated with each item number. A description of these item numbers are given in the following table, `item_no_desc`.
+
+
+
+* `item_no_desc`: Table providing explanations for each item number used in 8-K filings. The data is extracted from [here](https://www.sec.gov/fast-answers/answersform8khtm.html). The code to make the table is contained in [`get_item_no_desc.R`](get_item_no_desc.R), which scrapes the descriptions for each of the unique item numbers stored in `item_no`. The fields are
+
+    - `item_no`: the item number. Same as the numbers that appear in the corresponding field in the table `item_no`.
+    - `item_desc`: A description of the situation/context that the item number corresponds to.
+
 - `server_log`: **Details to come.**
 
 ### Tables used in updating tables above
