@@ -53,7 +53,6 @@ filings <- tbl(pg, "filings")
 
 file_names <-
     filings %>%
-    # filter(form_type %~% "^(10-[QK]|SC 13[DG](/A)?|DEF 14|8-K|6-K|13|[345](/A)?$)") %>%
     select(file_name)
 
 new_table <- !dbExistsTable(pg, "filing_docs")

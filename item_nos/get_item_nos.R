@@ -1,28 +1,30 @@
 #!/usr/bin/env Rscript
 library(dplyr, warn.conflicts = FALSE)
-library(RPostgreSQL, quietly = TRUE)
+library(DBI)
 library(stringr)
 library(readr)
 library(parallel)
 
-pg <- dbConnect(PostgreSQL())
+pg <- dbConnect(RPostgres::Postgres())
 
-filings  <- tbl(pg, sql("SELECT * FROM edgar.filings"))
+rs <- dbExecute(pg, "SET search_path TO edgar")
+
+filings  <- tbl(pg, "filings")
 
 # Identify files to read ----
 
-first_read <- !dbExistsTable(pg, c("edgar", "item_no"))
+first_read <- !dbExistsTable(pg, "item_no")
 
 form_types <- c("8-K")
 
 if (first_read) {
-    dbGetQuery(pg, "CREATE TABLE edgar.item_no (file_name text, item_no text)")
-    dbGetQuery(pg, "CREATE INDEX ON edgar.item_no (file_name)")
-    dbGetQuery(pg, "ALTER TABLE edgar.item_no OWNER TO edgar")
-    dbGetQuery(pg, "GRANT SELECT ON edgar.item_no TO edgar_access")
+    dbExecute(pg, "CREATE TABLE item_no (file_name text, item_no text)")
+    dbExecute(pg, "CREATE INDEX ON item_no (file_name)")
+    dbExecute(pg, "ALTER TABLE item_no OWNER TO edgar")
+    dbExecute(pg, "GRANT SELECT ON item_no TO edgar_access")
 }
 
-item_no <- tbl(pg, sql("SELECT * FROM edgar.item_no"))
+item_no <- tbl(pg, "item_no")
 
 files_to_read <-
     filings %>%
@@ -77,7 +79,7 @@ while(files_to_read %>% head() %>% count() %>% pull() > 0) {
             temp_results <- bind_rows(temp_list)
 
             if (nrow(temp_results) > 0) {
-                dbWriteTable(pg, c("edgar", "item_no"), temp_results,
+                dbWriteTable(pg, "item_no", temp_results,
                              append = TRUE, row.names = FALSE)
             }
         })
