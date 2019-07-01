@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 library(dplyr, warn.conflicts = FALSE)
-library(RPostgreSQL, quietly = TRUE)
+library(DBI)
 library(rvest, quietly = TRUE)
 library(parallel)
 
@@ -80,9 +80,7 @@ filing_docs_df_with_href <- function(file_name) {
 
     }
 
-
     return(df)
-
 }
 
 
@@ -90,14 +88,14 @@ filing_docs_df_with_href <- function(file_name) {
 get_filing_docs <- function(file_name) {
 
     try({
+            df <- filing_docs_df(file_name)
+            pg <- dbConnect(RPostgres::Postgres())
+            dbWriteTable(pg, c("edgar", "filing_docs"),
+                         df, append = TRUE, row.names = FALSE)
+            dbDisconnect(pg)
 
-    df <- filing_docs_df(file_name)
-    pg <- dbConnect(PostgreSQL())
-    dbWriteTable(pg, c("edgar", "filing_docs"),
-                 df, append = TRUE, row.names = FALSE)
-    dbDisconnect(pg)
-
-    return(TRUE)}, {return(FALSE)})
+            return(TRUE)
+        }, { return(FALSE) })
 
 }
 
@@ -134,7 +132,7 @@ get_filing_docs_alt <- function(file_name) {
         df$html_link <- hrefs
     }
 
-    pg <- dbConnect(PostgreSQL())
+    pg <- dbConnect(RPostgres::Postgres())
     dbWriteTable(pg, c("edgar", "filing_docs_alt"),
                  df, append = TRUE, row.names = FALSE)
     dbDisconnect(pg)
@@ -171,7 +169,7 @@ get_filings_by_type <- function(type_regex) {
     # for the set of filings from edgar.filings filtered by those types for which
     # the documents have not yet been processed into edgar.filing_docs
 
-    pg <- dbConnect(PostgreSQL())
+    pg <- dbConnect(RPostgres::Postgres())
 
     filings <- tbl(pg, sql("SELECT * FROM edgar.filings"))
 
@@ -198,7 +196,7 @@ get_filings_by_type <- function(type_regex) {
 
 process_filings <- function(filings_df) {
 
-    pg <- dbConnect(PostgreSQL())
+    pg <- dbConnect(RPostgres::Postgres())
     new_table <- !dbExistsTable(pg, c("edgar", "filing_docs"))
 
     system.time(temp <- mclapply(filings_df$file_name, get_filing_docs, mc.cores = 24))
@@ -217,7 +215,7 @@ process_filings <- function(filings_df) {
 
 process_filings_alt <- function(filings_df) {
 
-    pg <- dbConnect(PostgreSQL())
+    pg <- dbConnect(RPostgres::Postgres())
     new_table <- !dbExistsTable(pg, c("edgar", "filing_docs_alt"))
 
     system.time(temp <- mclapply(filings_df$file_name,
