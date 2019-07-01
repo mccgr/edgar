@@ -99,7 +99,8 @@ getLastUpdate <- function(year, quarter) {
 }
 
 # Create table with last_modified ----
-now <- now(tz = 'America/New_York')
+# Wait a day before trying to get data for a quarter.
+now <- now(tz = 'America/New_York') - days(1)
 current_year <- as.integer(year(now))
 current_qtr <- quarter(now)
 year <- 1993L:current_year
@@ -147,8 +148,8 @@ if (dbExistsTable(pg, c("edgar", "index_last_modified"))) {
 }
 
 #
-# If to_update has a non-trivial number of observations/rows (ie. at least 1), update the data
-#
+# If to_update has a non-trivial number of observations/rows (ie. at least 1),
+# update the data.
 if(nrow(to_update) > 0) {
     to_update <-
         to_update %>%
