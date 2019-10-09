@@ -94,9 +94,9 @@ def get_filing_list(engine, num_files = None):
     return(df)
     
     
-def get_cusip_cik(file_name, document):
+def get_cusip_cik(file_name):
     
-    url = get_file_document_url(file_name, document)
+    url = get_filing_txt_url(file_name)
     page = requests.get(url)
     soup = BeautifulSoup(page.content, 'html.parser')
     text = soup.getText()
