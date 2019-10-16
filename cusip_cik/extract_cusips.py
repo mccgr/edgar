@@ -3,6 +3,9 @@ import requests
 from bs4 import BeautifulSoup
 import psycopg2
 import re
+from codecs import decode
+from sqlalchemy import create_engine
+
 
 def get_index_file(file_name): 
     
@@ -94,20 +97,154 @@ def get_filing_list(engine, num_files = None):
     return(df)
     
     
+def get_subject_cik_company_name(file_name, soup = None):
+    
+    if(soup is None):
+        
+        url = get_filing_txt_url(file_name)
+        page = requests.get(url)
+        soup = BeautifulSoup(page.content, 'html.parser')
+        
+    try:
+        header_tag = soup.find(['IMS-HEADER', 'SEC-HEADER', 'sec-header'])
+        text = header_tag.getText()
+        subject_text = decode(re.findall('(SUBJECT COMPANY:.*)FILED BY:', repr(text))[0], 'unicode_escape')
+        cik = int(re.sub('[^\d]*', '', \
+                         re.findall('CENTRAL INDEX KEY:[\t\r\n]*(.*)[\t\r\n]', subject_text)[0]))
+
+        company_name = re.sub('[\n\t\r]*', '', \
+                                      re.findall('COMPANY CONFORMED NAME:[\t\r\n]*(.*)[\t\r\n]', subject_text)[0])
+
+        company_name = company_name.strip(' ')
+        
+        return(cik, company_name)
+        
+    except:
+        
+        try:
+            
+            url = get_index_url(file_name)
+            page = requests.get(url)
+            soup = BeautifulSoup(page.content, 'html.parser')
+
+            subject_regex = "(.*)\(Subject\)|\(SUBJECT\)|\(subject\)(.*)"
+            company_nodes = soup.findAll(attrs = {'class': 'companyName'})
+
+            for node in company_nodes:
+
+                if(re.search(subject_regex, node.getText())):
+
+                    subject_node = node
+                    break
+
+            lines = subject_node.text.split('\n')
+            cik = int(re.sub('[^\d]', '', re.sub('\(see all company filings\)|CIK:', '', lines[1]).strip(' ')))
+            company_name = re.sub('\(Subject\)', '', lines[0]).strip(' ')
+
+            return(cik, company_name)
+        
+        except:
+            
+            cik = None
+            company_name = None
+            return(cik, company_name)
+        
+
+
+def calculate_cusip_check_digit(cusip):
+    
+    values = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
+              'A': 10, 'B':11, 'C': 12, 'D': 13, 'E':14, 'F': 15, 'G': 16, 'H': 17, 'I': 18, 'J': 19,
+              'K': 20, 'L': 21, 'M': 22, 'N': 23, 'O': 24, 'P': 25, 'Q': 26, 'R': 27, 'S': 28, 'T': 29,
+              'U': 30, 'V': 31, 'W': 32, 'X': 33, 'Y': 34, 'Z': 35, '*': 36, '@': 37, '#': 38
+               }
+    
+    digit_str = ''
+    
+    if(len(cusip) >= 8):
+    
+        for i in range(8):
+
+            if(i % 2 == 0):
+                digit_str = digit_str + str(values[cusip[i]])
+            else:
+                digit_str = digit_str + str(2 * values[cusip[i]])
+
+        result = 0
+
+        for i in range(len(digit_str)):
+
+            result = result + int(digit_str[i])
+
+        result = (10 - result) % 10
+
+        return(result)
+    
+    elif(len(cusip) >= 6):
+        
+        for i in range(6):
+
+            if(i % 2 == 0):
+                digit_str = digit_str + str(values[cusip[i]])
+            else:
+                digit_str = digit_str + str(2 * values[cusip[i]])
+
+        result = 0
+
+        for i in range(len(digit_str)):
+
+            result = result + int(digit_str[i])
+
+        result = (10 - result) % 10
+
+        return(result)
+    
+    elif(len(cusip) >= 3):
+        
+        cusip = '0' * (9 - len(cusip)) + cusip
+        
+        for i in range(8):
+
+            if(i % 2 == 0):
+                digit_str = digit_str + str(values[cusip[i]])
+            else:
+                digit_str = digit_str + str(2 * values[cusip[i]])
+
+        result = 0
+
+        for i in range(len(digit_str)):
+
+            result = result + int(digit_str[i])
+
+        result = (10 - result) % 10
+
+        return(result)
+    
+    else:
+        
+        return(None)
+
+
 def get_cusip_cik(file_name):
     
     url = get_filing_txt_url(file_name)
     page = requests.get(url)
     soup = BeautifulSoup(page.content, 'html.parser')
+    
+    
+    cik, company_name = get_subject_cik_company_name(file_name, soup)
+    
     text = soup.getText()
     
-    cusip_hdr = r'CUSIP\s+(?:No\.|#|Number):?'
-    cusip_fmt = r'([0-9A-Z]{1,3}[\s-]?[0-9A-Z]{3,5}[\s-]?[0-9A-Z]{2}[\s-]?[0-9A-Z]{1}|' \
-                + '[0-9A-Z]{4,6}[\s-]?[0-9A-Z]{2}[\s-]?[0-9A-Z]{1})'
+    cusip_hdr = r'CUSIP\s+(?:No\.|NO\.|#|Number|NUMBER):?'
+    cusip_fmt = '((?:[0-9A-Z]{1}[ -]{0,3}){6,9})'
     
-    regex_dict = {'A': cusip_hdr + '[\t\r\n\s]+' + cusip_fmt,
-                  'B': cusip_fmt + r'[\n]?[_-]?\s+(?:[_-]{9,})?[\s\r\t\n]*\(CUSIP Number\)',
-                  'C': cusip_fmt + '[\s\t\r]*[\n]?' + '[\s\t\r]*\(CUSIP Number of Class of Securities\)'
+    regex_dict = {'A': cusip_fmt + r'[\n]?[_\.-]?\s+(?:[_\.-]{9,})?[\s\r\t\n]*' +  \
+    r'\(CUSIP\s+(?:Number|NUMBER|number|Number\s+of\s+Class\s+of\s+Securities|NUMBER\s+OF\s+CLASS\s+OF\s+SECURITIES)\)',
+                  'B': cusip_fmt + '[\s\t\r]*[\n]?' + r'[\s\t\r]*' +  \
+    r'\(CUSIP\s+(?:Number|NUMBER|number|Number\s+of\s+Class\s+of\s+Securities|NUMBER\s+OF\s+CLASS\s+OF\s+SECURITIES)\)',
+                  'C': '[\s_]+' + cusip_hdr + '[ _]{0,20}' + cusip_fmt + '\s+',
+                  'D': '[\s_]+' + cusip_hdr + '(?:\n[\s_]{0,20}){1,2}' + cusip_fmt + '\s+'
                  }
     
     df_list = []
@@ -116,32 +253,70 @@ def get_cusip_cik(file_name):
 
         matches = re.findall(regex, text)
 
-        cusips = [re.sub('[^0-9A-Z]', '', re.search(cusip_fmt, match).group(0)) for match in matches]
+        cusips = [re.sub('[^0-9A-Z]', '', match) for match in matches if len(match) > 0]
+        check_digits = [calculate_cusip_check_digit(cusip) for cusip in cusips]
 
         if(len(cusips)):
-            df = pd.DataFrame({'cusip': cusips})
+            df = pd.DataFrame({'cusip': cusips, 'check_digit': check_digits})
             df['format'] = key
             df['file_name'] = file_name
-            df = df[["file_name", "cusip", "format"]]
+            df['cik'] = cik
+            df['company_name'] = company_name
+            df = df[["file_name", "cusip", "cik", "check_digit", "company_name", "format"]]
 
         else:
-            df = pd.DataFrame({"file_name": [], "cusip": [], "format": []})
+            df = pd.DataFrame({"file_name": [], "cusip": [], "cik": [], "check_digit": [], \
+                               "company_name": [], "format": []})
 
         df_list.append(df)
         
     
     full_df = pd.concat(df_list)
     
+    if(full_df.shape[0]):
     
-    formats = full_df.groupby('cusip').apply(lambda x: ''.join(x['format'].unique().tolist()))
+        formats = full_df.groupby('cusip').apply(lambda x: ''.join(x['format'].unique().tolist()))
+
+        full_df['formats'] = full_df['cusip'].apply(lambda x: formats[x])
+
+        full_df = full_df[['file_name', 'cusip', 'check_digit', 'cik', 'company_name', 'formats']]
+
+        full_df = full_df.drop_duplicates().reset_index(drop = True)
+        
+        full_df['cik'] = full_df['cik'].astype(np.int64)
+        full_df['check_digit'] = full_df['check_digit'].astype(np.int64)
+
+        return(full_df)
     
-    full_df['formats'] = full_df['cusip'].apply(lambda x: formats[x])
+    else:
+        
+        full_df = pd.DataFrame({"file_name": [file_name], "cusip": [None], "check_digit": [None], \
+                                "cik": cik, "company_name": company_name, "formats": [None]})
+        
+        return(full_df)
+        
+        
+        
+def get_cusip_cik_from_list_df(filings_list):
     
-    full_df = full_df[['file_name', 'cusip', 'formats']]
+    df_list = filings_list['file_name'].apply(get_cusip_cik).tolist()
     
-    full_df = full_df.drop_duplicates()
+    df = pd.concat(df_list, ignore_index = True)
     
-    return(full_df)
+    return(df)
+        
+        
+
+dbname = os.getenv("PGDATABASE")
+host = os.getenv("PGHOST", "localhost")
+conn_string = "postgresql://" + host + "/" + dbname
+
+
+engine = create_engine(conn_string)
+
+
+
+file_list = get_filing_list(engine)
 
 
 
@@ -149,26 +324,17 @@ def get_cusip_cik(file_name):
 
 
 
-page = requests.get('https://www.sec.gov/Archives/edgar/data/315066/000031506618001444/filing.txt')
-soup = BeautifulSoup(page.content, 'html.parser')
-text = soup.getText()
-lines = pd.Series(text.split('\n'))
 
-cusip_hdr = r'CUSIP\s+(?:No\.|#|Number):?'
-cusip_fmt = r'[0-9A-Z]{1,3}[\s-]?[0-9A-Z]{3}[\s-]?[0-9A-Z]{2}[\s-]?\d{1}'
 
-conn = psycopg2.connect(database = os.getenv('PGDATABASE'), host = os.getenv('PGHOST'), user = os.getenv('PGUSER'), password = os.getenv('PGPASSWORD'))
 
-is_hdr = lines.str.match(cusip_hdr)
-is_fmt = lines.str.match(cusip_hdr)
 
-is_a = re.search(cusip_hdr + '\s+' + cusip_fmt , text)
-is_d = re.search(cusip_fmt + r'\s+(?:[_-]{9,})?\s*\(CUSIP Number\)', text)
-if(is_a is not None):
-    Format = 'A'
-    match = is_a.group(0)
-    cusip = re.search(cusip_fmt, match).group(0)
-elif(is_d is not None):
-    Format = 'D'
-    match = is_d.group(0)
-    cusip = re.search(cusip_fmt, match).group(0)
+
+
+
+
+
+
+
+
+
+
