@@ -299,11 +299,20 @@ def get_cusip_cik(file_name):
         
 def get_cusip_cik_from_list_df(filings_list):
     
-    df_list = filings_list['file_name'].apply(get_cusip_cik).tolist()
+    df_list = [get_cusip_cik(file_name) for file_name in filings_list]
     
     df = pd.concat(df_list, ignore_index = True)
     
     return(df)
+        
+        
+        
+def write_cusip_ciks(filings_list, engine):
+    
+    df = get_cusip_cik_from_list_df(filings_list)
+    
+    df.to_sql('cusip_cik', engine, schema="edgar", if_exists="append", 
+        index=False, dtype = types)
         
         
 
@@ -314,16 +323,49 @@ conn_string = "postgresql://" + host + "/" + dbname
 
 engine = create_engine(conn_string)
 
+inspector = inspect(engine)
+
+table_exists = 'cusip_cik' in inspector.get_table_names("edgar")
+
+if(not table_exists):
+    
+    create_tbl_sql = """
+             CREATE TABLE edgar.cusip_cik(
+             file_name TEXT,
+             cusip TEXT,
+             check_digit INTEGER,
+             cik INTEGER,
+             company_name TEXT,
+             formats TEXT
+             )
+          """
+    
+    
+    engine.execute(create_tbl_sql)
+
+file_list = get_filing_list(engine)['file_name'].tolist()
+
+num_filings = file_list.shape[0]
+
+batch_size = 200
+
+num_batches = (num_filings // batch_size) + (num_filings % batch_size > 0)
 
 
-file_list = get_filing_list(engine)
+for i in range(num_batches):
+    
+    start = i * batch_size
+    
+    if(i == num_batches - 1):
+        
+        finish = num_filings 
+        
+    else:
+        
+        finish = (i + 1) * num_batches 
 
-
-
-
-
-
-
+    
+    write_cusip_ciks(file_list[start:finish], engine)
 
 
 
