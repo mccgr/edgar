@@ -353,7 +353,7 @@ def write_cusip_ciks(filings_list, engine):
     df, num_success = get_cusip_cik_from_list_df(filings_list)
     
     df.to_sql('cusip_cik', engine, schema="edgar", if_exists="append", 
-        index=False, dtype = types)
+        index=False)
     
     return(num_success)
         
