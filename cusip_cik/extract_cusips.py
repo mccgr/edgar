@@ -70,7 +70,8 @@ def get_filing_list(engine, num_files = None):
               SELECT a.file_name FROM edgar.filings AS a
               LEFT JOIN edgar.cusip_cik AS b
               ON a.file_name = b.file_name
-              WHERE b.file_name IS NULL
+              WHERE a.form_type IN ('SC 13G', 'SC 13G/A', 'SC 13D', 'SC 13D/A')
+              AND b.file_name IS NULL
               """
         
         
@@ -274,10 +275,10 @@ def get_cusip_cik(file_name):
         r'\(CUSIP\s+(?:Number|NUMBER|number|Number\s+of\s+Class\s+of\s+Securities|NUMBER\s+OF\s+CLASS\s+OF\s+SECURITIES)\)',
                       'B': cusip_fmt + '[\s\t\r]*[\n]?' + r'[\s\t\r]*' +  \
         r'\(CUSIP\s+(?:Number|NUMBER|number|Number\s+of\s+Class\s+of\s+Securities|NUMBER\s+OF\s+CLASS\s+OF\s+SECURITIES)\)',
-                      'C': '[\s_]+' + cusip_hdr + '[ _]{0,20}' + cusip_fmt + '\s+',
-                      'D': '[\s_]+' + cusip_hdr + '(?:\n[\s_]{0,20}){1,2}' + cusip_fmt + '\s+'
+                      'C': '[\s_]+' + cusip_hdr + '[ _]{0,50}' + cusip_fmt + '\s+',
+                      'D': '[\s_]+' + cusip_hdr + '(?:\n[\s_]{0,50}){1,2}' + cusip_fmt + '\s+'
                      }
-
+                                                  
         df_list = []
 
         for key, regex in regex_dict.items():
