@@ -1,7 +1,7 @@
+import os
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
-import psycopg2
 import re
 from codecs import decode
 from sqlalchemy import create_engine, inspect
@@ -388,7 +388,7 @@ if(not table_exists):
 
 file_list = get_filing_list(engine)['file_name'].tolist()
 
-num_filings = file_list.shape[0]
+num_filings = len(file_list)
 
 batch_size = 200
 
