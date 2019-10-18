@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import numpy as np
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -8,7 +9,7 @@ from sqlalchemy import create_engine, inspect
 import datetime as dt
 
 
-def get_index_file(file_name): 
+def get_index_url(file_name): 
     
     # This is a Python version of the function of the same name in scrape_filing_doc_functions.R
     
@@ -125,7 +126,14 @@ def get_subject_cik_company_name(file_name, soup = None):
     try:
         header_tag = soup.find(['IMS-HEADER', 'SEC-HEADER', 'sec-header'])
         text = header_tag.getText()
-        subject_text = decode(re.findall('(SUBJECT COMPANY:.*)FILED BY:', repr(text))[0], 'unicode_escape')
+        subject_company_start = re.search('SUBJECT COMPANY:', repr(text)).start()
+        filer_company_start = re.search('FILED BY:', repr(text)).start()
+        
+        if(subject_company_start < filer_company_start):
+            subject_text = decode(re.findall('(SUBJECT COMPANY:.*)FILED BY:', repr(text))[0], 'unicode_escape')
+        else:
+            subject_text = decode(re.findall('(SUBJECT COMPANY:.*)', repr(text))[0], 'unicode_escape')
+            
         cik = int(re.sub('[^\d]*', '', \
                          re.findall('CENTRAL INDEX KEY:[\t\r\n]*(.*)[\t\r\n]', subject_text)[0]))
 
@@ -336,7 +344,7 @@ def get_cusip_cik(file_name):
         return(None)
 
         
-        
+
         
 def get_cusip_cik_from_list_df(filings_list):
     
