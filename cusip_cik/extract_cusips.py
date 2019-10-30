@@ -429,7 +429,7 @@ for i in range(num_batches):
     num_success = num_success + write_cusip_ciks(file_list[start:finish], engine)
     t2 = dt.datetime.now()
     
-    print(str(num_success) + " filings successfully processed out of " + str((i + 1) * batch_size))
+    print(str(num_success) + " filings successfully processed out of " + str(finish))
     print("Time taken: " + str(t2 - t1))
 
 
