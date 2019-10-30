@@ -116,7 +116,10 @@ def get_subject_cik_company_name(file_name, soup = None):
         
         url = get_filing_txt_url(file_name)
         page = requests.get(url)
-        soup = BeautifulSoup(page.content, 'html.parser')
+        # Following two lines omit source code for added files, pdfs, gifs, etc...
+        page_end = re.search(b'</DOCUMENT>', page.content).end() 
+        content = page.content[:page_end] + b'\n</SEC-DOCUMENT>'
+        soup = BeautifulSoup(content, 'html.parser')
         
         
     if(exceeded_sec_request_limit(soup)):
@@ -265,7 +268,10 @@ def get_cusip_cik(file_name):
     
         url = get_filing_txt_url(file_name)
         page = requests.get(url)
-        soup = BeautifulSoup(page.content, 'html.parser')
+        # Following three lines omit source code for added files, pdfs, gifs, etc...
+        page_end = re.search(b'</DOCUMENT>', page.content).end() 
+        content = page.content[:page_end] + b'\n</SEC-DOCUMENT>'
+        soup = BeautifulSoup(content, 'html.parser')
 
         if(exceeded_sec_request_limit(soup)):
 
