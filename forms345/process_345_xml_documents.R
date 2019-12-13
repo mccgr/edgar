@@ -1,3 +1,4 @@
+#!/usr/bin/env Rscript
 library(RPostgreSQL)
 library(XML)
 library(rjson)
@@ -5,7 +6,10 @@ library(RCurl)
 library(dplyr)
 library(lubridate)
 library(parallel)
-source('forms_345_xml_functions.R')
+
+EDGAR_CODE_DIR <- Sys.getenv('EDGAR_CODE_DIR')
+
+source(paste0(EDGAR_CODE_DIR, '/forms345/forms_345_xml_functions.R'))
 
 set_permissions_access <- function(table_name) {
 
