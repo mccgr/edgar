@@ -29,7 +29,7 @@ get_filing_doc_exception_list <- function(num_files = Inf) {
 
             files <-
                 failed_to_download %>%
-                anti_join(filing_docs_alt) %>%
+                anti_join(filing_docs_alt, by = c("file_name", "document")) %>%
                 filter(document %~*% "txt$") %>%
                 collect(n = num_files)
 
@@ -87,7 +87,7 @@ filing_docs_df_with_href <- function(file_name) {
 
     if (length(table_nodes) < 1) {
         df <- tibble(seq = NA, description = NA, document = NA, type = NA,
-                     size = NA, file_name = file_name, downloaded = NA)
+                     size = NA, file_name = file_name)
     } else {
 
         df <- table_nodes %>% html_table() %>% bind_rows() %>% fix_names() %>% mutate(file_name = file_name, type = as.character(type))
@@ -103,7 +103,7 @@ filing_docs_df_with_href <- function(file_name) {
     }
 
 
-    return(df)}, {return(tibble(seq = NA, description = NA, document = NA, type = NA, size = NA, file_name = file_name, downloaded = NA))})
+    return(df)}, {return(tibble(seq = NA, description = NA, document = NA, type = NA, size = NA, file_name = file_name))})
 
 }
 
@@ -142,9 +142,9 @@ get_filing_docs_alt <- function(file_name) {
 
 }
 
-download_exceptional_filing_document <- function(file_name, document, path_alt=NULL) {
+download_exceptional_filing_document <- function(file_name, document, path_alt=NA) {
 
-    if (is.null(path_alt)) {
+    if (is.na(path_alt)) {
 
         path <- get_file_path(file_name, document)
 
