@@ -47,11 +47,38 @@ def get_file_text_from_directory(file_name, document, directory):
     return(txt)
     
 
+def fix_unmatched_page_tags(text):
+    
+    # First fix missing right dels
+    
+    start_tag_r_regex = '<PAGE[^>]' 
+    end_tag_r_regex = '</PAGE[^>]'
+    
+    corrected_r_start = '<PAGE>\n' # Introduce newline in case newline replace by right del
+    corrected_r_end = '</PAGE>\n'
+    
+    fixed_content = re.sub(start_tag_r_regex, corrected_r_start, text)
+    fixed_content = re.sub(end_tag_r_regex, corrected_r_end, fixed_content)
+    
+    # Now fix missing left dels
+    
+    start_tag_l_regex = '[^<]PAGE>' 
+    end_tag_l_regex = '[^<]/PAGE>'
+    
+    corrected_l_start = '\n<PAGE>' # Introduce newline in case newline replace by left del
+    corrected_l_end = '\n</PAGE>'
+    
+    fixed_content = re.sub(start_tag_l_regex, corrected_l_start, fixed_content)
+    fixed_content = re.sub(end_tag_l_regex, corrected_l_end, fixed_content)
+    
+    return(fixed_content)
+
+
 def clean_text(text):
     
     # this function gets rid of unwanted characters and spaces
     
-    result = text
+    result = fix_unmatched_page_tags(text) # First fix tags which are missing delimeters
     
     char_list = ['\xa0', '&#160;', '&#\n160;']
     
@@ -60,6 +87,35 @@ def clean_text(text):
         result = re.sub(c, ' ', result) 
         
     return(result)
+
+
+def get_bounded_text(text, lower_bound = None, upper_bound = None):
+    
+    if(lower_bound is not None):
+        
+        if(upper_bound is not None):
+            
+            if(lower_bound >= upper_bound):
+                
+                raise ValueError("upper_bound not more than lower_bound")
+                
+            else:
+                
+                return(text[lower_bound:upper_bound])
+            
+        else:
+            
+            return(text[lower_bound:])
+        
+    else:
+        
+        if(upper_bound is not None):
+            
+            return(text[lower_bound:upper_bound])
+        
+        else:
+            
+            return(text)
 
    
     
@@ -242,10 +298,39 @@ def find_title_page_end(text):
         
         return(result)
         
-        
-def find_orthodox_cover_page_q1_start(text):
 
-    text_raised = text.upper()
+def is_rep_q_as_items(text, q1_start = None):
+    
+    # this function works on the basis that the the actual "items" in the real item section does not go beyond
+    # Item 10. So by searching for Item 12 or 14 (in SC 13G and SC 13D respectively), we can detect whether
+    # a filer has erroneously labelled the questions in the reporting pages as items
+    
+    if(q1_start is None):
+      
+        q1_start = find_orthodox_cover_page_q1_start(text)
+    
+    if(q1_start == -1):
+    
+        text_raised = text.upper()
+        
+        regex = '\n\s*ITEM\s*(\.)?\s*[\(]?\s*1[24]\s*[\)]?(\.)?'
+        
+        search = re.search(regex, text_raised)
+        
+        if(search):
+            return(True)
+        else:
+            return(False)
+            
+    else:
+      
+        return(False)
+        
+        
+        
+def find_orthodox_cover_page_q1_start(text, lower_bound = None, upper_bound = None):
+
+    text_raised = get_bounded_text(text, lower_bound, upper_bound).upper()
 
     regex0 = '\s+[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?\s*(.){0,50}\s*' + \
              'NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?\s+(?:REPORTING|ABOVE|REPORT)'
@@ -290,7 +375,6 @@ def find_orthodox_cover_page_q1_start(text):
     
     regex_list = [regex0, regex1, regex2, regex3, regex4, regex5, regex6, regex7, regex8, regex9, regex10]
     
-    start = None
     
     for i in range(len(regex_list)):
         
@@ -298,36 +382,86 @@ def find_orthodox_cover_page_q1_start(text):
         
         if(search):
             
-            if(start is None):
-                
-                start = search.start()
-                
-            else:
-                
-                new = search.start()
-                
-                if(new < start):
-                    
-                    start = new            
+            break
 
-    if(start):
+    if(search):
         
-        return(start)
+        return(search.start())
     
     else:
         
         return(-1)   
+
+
+def cover_page_start_is_rep_as_q(text, form_type, lower_bound = None, upper_bound = None, rep_q_as_items = None):
+    # this function is for cases where is_rep_q_as_items is True
+    
+    
+    text_raised = get_bounded_text(text, lower_bound, upper_bound).upper()
         
-        
-def cover_page_start(text, form_type, cover_page_q1 = None, rep_q_as_items = None):
+    search = None
     
     if(rep_q_as_items is None):
         
         rep_q_as_items = is_rep_q_as_items(text)
+
+    if(re.search('SC 13D', form_type)):
+        
+        if(rep_q_as_items):
+            
+            search = re.search('\n\s*ITEM\s+[\(\|]?\s?1\s?[\)\|]?\s*[:\.]{0,1}(.)+?' + \
+                  '\n\s*ITEM\s+[\(\|]?\s?14\s?[\)\|]?\s*[:\.]{0,1}', text_raised, flags = re.DOTALL)
+            
+        else:
+            return(-1)
+        
+    if(re.search('SC 13G', form_type)):
+        
+        if(rep_q_as_items):
+            
+            search = re.search('\n\s*ITEM\s+[\(\|]?\s?1\s?[\)\|]?\s*[:\.]{0,1}(.)+?' + \
+                  '\n\s*ITEM\s+[\(\|]?\s?12\s?[\)\|]?\s*[:\.]{0,1}', text_raised, flags = re.DOTALL)
+            
+        else:
+            return(-1)
+            
+    if(search):
+        
+        return(search.start() + lower_bound)
+    
+    else:
+        
+        return(-1)
+
+
+
+def find_cover_page_q1_start(text, form_type, lower_bound = None, upper_bound = None, rep_q_as_items = None):
+    
+    if(rep_q_as_items is None):
+        
+         rep_q_as_items = is_rep_q_as_items(get_bounded_text(text, lower_bound, upper_bound))
+            
+    if(rep_q_as_items):
+        
+        result = cover_page_start_is_rep_as_q(text, form_type, lower_bound, upper_bound, rep_q_as_items)
+        
+    else:
+        
+        result = find_orthodox_cover_page_q1_start(text, lower_bound, upper_bound)
+        
+    return(result)
+
+    
+        
+def cover_page_start(text, form_type, lower_bound = None, cover_page_q1 = None, rep_q_as_items = None):
+    
+    if(rep_q_as_items is None):
+        
+        rep_q_as_items = is_rep_q_as_items(text, cover_page_q1)
     
     if(cover_page_q1 is None):
         
-        cover_page_q1 = find_cover_page_q1_start(text, rep_q_as_items)
+        cover_page_q1 = find_cover_page_q1_start(text, form_type, lower_bound, cover_page_q1, rep_q_as_items)
         
     if(cover_page_q1 == -1):
         
@@ -385,11 +519,11 @@ def find_cover_pages_last_question(text, rep_q_as_items = None,  lower_bound = N
     
     if(rep_q_as_items):
         
-        regex = 'ITEM\s*[\(]?\s*1[24]\s*[\)]?\s*[\:\.]?'
+        regex = 'ITEM\s*[\(\|]?\s*1[24]\s*[\)\|]?\s*[\:\.]?'
         
     else:
     
-        regex = '[\(]?\s*1[24][\)]?\s*[\:\.]?\s*TYPE[S]?\s+OF\s+REPORTING\s+PERSON[S]?[\*]?\s*(\(SEE\s+INSTRUCTIONS\))?'
+        regex = '[\(\|]?\s*1[24]\s*[\)\|]?\s*[\:\.]?\s*TYPE[S]?\s+OF\s+REPORTING\s+PERSON[S]?[\*]?\s*(\(SEE\s+INSTRUCTIONS\))?'
 
     search = re.search(regex, text_raised)
 
@@ -411,30 +545,198 @@ def find_cover_pages_last_question(text, rep_q_as_items = None,  lower_bound = N
         
 
     
+def find_cover_pages_end(text, form_type, rep_q_as_items = None, lower_bound = None, upper_bound = None):
     
-def find_cover_pages_end(text, rep_q_as_items = None, lower_bound = None, upper_bound = None):
-    
-    
-    end = find_cover_pages_last_question(text, rep_q_as_items, lower_bound, upper_bound)
+    if(upper_bound is None):
         
+        upper_bound = get_item_section_start(text, form_type)
+    
+    if(lower_bound is None):
+        
+        lower_bound = find_cover_pages_last_question(text, rep_q_as_items, None, upper_bound)
+    
+    end = None
+        
+    # First check for footnotes
+    
+    last_footnote_start = find_last_footnote_index_end(text, lower_bound, upper_bound)
+    
+    if(last_footnote_start != -1):
+        
+        end = last_footnote_start
+        
+        search = re.search('\n\s*\n', text[end:upper_bound])
+
+        if(search is not None):
+
+            end = end + search.end()
+
+            return(end)
+        
+ 
     answer_regex = '\s*([A-Z0]{1}[;, \.]?[A-Z0]{1}[;, \.]?)*([A-Z0]{1}[;, \.]?[A-Z0]{1}[;, \.]?)\s*\n?'
-    
-    if(upper_bound is not None):
-    
-        last_answer = re.search(answer_regex, text[end:upper_bound])
-        
-    else:
-        
-        last_answer = re.search(answer_regex, text[end:])
-    
+
+    last_answer = re.search(answer_regex, text[lower_bound:upper_bound])
+
     if(last_answer is not None):
+
+        end = lower_bound + last_answer.end()
+        return(end)
+
+    # Finally, try finding a key stopword in all caps, such as SCHEDULE 13D, CUSIP, etc...
+
+    end = first_header_word_after_cover_page(text, form_type, lower_bound, \
+                                       upper_bound, rep_q_as_items)
+
+    if(end != -1):
+
+        return(end)
+
+    else:
+
+        return(-1)
     
-        return(end + last_answer.end())
+
+      
+ 
+def find_last_footnote_index_end(text, lower_bound = None, upper_bound = None):
+    
+    
+    bounded_text = get_bounded_text(text, lower_bound, upper_bound)
+        
+    regex1 = '\n\s*[\(\|]?\s*[*]+\s*[\)\|]?\s*[a-zA-Z]'
+    regex2 = '\n\s*[\(\|]\s*([0-9]{1,3}|[a-zA-Z]{1})\s*[\)\|]\s*[a-zA-Z]'   
+    
+    # first try regex1
+    
+    last_footnote_ind_end  = find_last_search_end(regex1, bounded_text)
+    
+    if(last_footnote_ind_end is not None):
+        
+        if(lower_bound is not None):
+            
+            result = last_footnote_ind_end + lower_bound
+            
+        else: 
+            
+            result = last_footnote_ind_end
+            
+        return(result)
+            
+    else:
+        
+        # Try regex2
+        
+        last_footnote_ind_end = find_last_search_end(regex2, bounded_text)
+    
+        if(last_footnote_ind_end is not None):
+
+            if(lower_bound is not None):
+
+                result = last_footnote_ind_end + lower_bound
+
+            else: 
+
+                result = last_footnote_ind_end
+
+            return(result)
+        
+        else:
+            
+            return(-1)
+            
+            
+     
+      
+def find_last_footnote_start(text, lower_bound = None, upper_bound = None):
+    
+    
+    bounded_text = get_bounded_text(text, lower_bound, upper_bound)
+        
+    regex1 = '\n\s*[\(\|]?\s*[*]+\s*[\)\|]?\s*[a-zA-Z]'
+    regex2 = '\n\s*[\(\|]\s*([0-9]{1,3}|[a-zA-Z]{1})\s*[\)\|]\s*[a-zA-Z]'   
+    
+    # first try regex1
+    
+    last_footnote_start = find_last_search_start(regex1, bounded_text)
+    
+    if(last_footnote_start is not None):
+        
+        if(lower_bound is not None):
+            
+            result = last_footnote_start + lower_bound
+            
+        else: 
+            
+            result = last_footnote_start
+            
+        return(result)
+            
+    else:
+        
+        # Try regex2
+        
+        last_footnote_start = find_last_search_start(regex2, bounded_text)
+    
+        if(last_footnote_start is not None):
+
+            if(lower_bound is not None):
+
+                result = last_footnote_start + lower_bound
+
+            else: 
+
+                result = last_footnote_start
+
+            return(result)
+        
+        else:
+            
+            return(-1)
+            
+            
+        
+
+def first_header_word_after_cover_page(text, form_type, cover_page_last_q = None, upper_bound = None, rep_q_as_items = None):
+    
+    if(rep_q_as_items is None):
+        
+        rep_q_as_items = is_rep_q_as_items(text)
+    
+    if(cover_page_last_q is None):
+        
+        cover_page_last_q = find_cover_pages_last_question(text, rep_q_as_items,  lower_bound, upper_bound)
+        
+    if(cover_page_last_q == -1):
+        
+        # No question 1 found, so no cover pages, return -1
+        return(-1) 
     
     else:
         
-        return(-1)
+        text_to_search = get_bounded_text(text, cover_page_last_q, upper_bound)
         
+        text_raised = text_to_search.upper()
+
+        regex = '\n\s*(CUSIP|SEDOL|SCHEDULE\s+13[DG]|PAGE|13[DG])'
+
+        search = re.search(regex, text_raised)
+
+        if(search):
+
+            num_forward = search.start()
+            
+            start = cover_page_last_q + num_forward
+
+            return(start)
+
+        else:
+
+            return(-1)
+
+        
+
+
  
 
 def num_cusip_sedol_before_index(text, index = None):
@@ -565,11 +867,15 @@ def get_item_section_start(text, form_type):
         search = re.search('\n\s*item\s*[#\.\;\:]?\s*(?:[0-9])[#\.\;\:]?', text_lowered)
         
         if(search):
+            
+            search_str = search.group(0)
+            
+            num_to_item = re.search('item', search_str).start()
 
-            return(cover_pages_end + search.start())  
+            return(cover_pages_end + search.start() + num_to_item)  
         
         else:
-            return(None) # ie. assume no Item section (this probably happens with 13D/A and 13G/A)
+            return(-1) # ie. assume no Item section (this probably happens with 13D/A and 13G/A)
     
     else:
         
@@ -579,11 +885,15 @@ def get_item_section_start(text, form_type):
 
         if(search):
 
-            return(search.start())  
+            search_str = search.group(0)
+            
+            num_to_item = re.search('item', search_str).start()
+
+            return(search.start() + num_to_item)  
         
         else: 
              
-            result = None # ie. assume no Item section (this probably happens with 13D/A and 13G/A) if no matches in
+            result = -1 # ie. assume no Item section (this probably happens with 13D/A and 13G/A) if no matches in
                           # re_list
                 
             for i in range(len(re_list)):
@@ -592,31 +902,31 @@ def get_item_section_start(text, form_type):
                 
                 if(search):
                     
-                    result = search.start()
+                    search_str = search.group(0)
+            
+                    num_to_item = re.search('item', search_str).start()
+                    
+                    result = search.start() + num_to_item
                     break
             
             
             return(result)     
     
     
+def get_signatures_sec_start(text, lower_bound = None, upper_bound = None):
     
-def get_signatures_sec_start(text):
+    text_lowered = get_bounded_text(text, lower_bound, upper_bound).lower()
     
-    text_lowered = text.lower()
+    regex1 = '\n\s*(signature|signatures)\s*(\.)?\n'
     
-    
-    regex0 = '\n\s*item\s+10(\.)?\s+certification'
-    
-    regex1 = 'the\s+following\s+certification\s+shall\s+be\s+included\s+if\s+the\s+statement\s+is\s+filed\s+' + \
+    regex2 = 'the\s+following\s+certification\s+shall\s+be\s+included\s+if\s+the\s+statement\s+is\s+filed\s+' + \
              'pursuant to rule 13d-1\(b\)'
     
-    regex2 = 'by\s+signing\s+below\s+i\s+certify\s+that,\s+to\s+the\s+best\s+of\s+my\s+knowledge'
-    
-    regex3 = '\n\s*(signature|signatures)\s*(\.)?\n'
+    regex3 = 'by\s+signing\s+below\s+i\s+certify\s+that,\s+to\s+the\s+best\s+of\s+my\s+knowledge'
 
     regex4 = 'after\s+reasonable\s+inquiry\s+'
     
-    regex_list = [regex0, regex1, regex2, regex3, regex4]
+    regex_list = [regex1, regex2, regex3, regex4]
     
     regex_search = None
     
@@ -630,10 +940,105 @@ def get_signatures_sec_start(text):
         
     if(regex_search):
         
-        return(regex_search.start())
+        if(lower_bound is not None):
+        
+            return(regex_search.start() + lower_bound)
+        
+        else:
+            
+            return(regex_search.start())
     
     else:
-        return(None)
+      
+        return(-1)
+        
+        
+def get_exhibit_sec_start(text, lower_bound = None, upper_bound = None):
+    
+    text_upper = get_bounded_text(text, lower_bound, upper_bound).upper()
+    
+    regex0 = '\n\s*EXHIBIT\s+INDEX'
+    
+    regex1 = '\n\s*EXHIBIT\s+[0-9A-Z](:)?'
+    
+    regex2 = '\n\s*APPENDIX\s+[0-9A-Z](:)?'
+    
+    regex_list = [regex0, regex1, regex2]
+    
+    regex_search = None
+    
+    for i in range(len(regex_list)):
+        
+        regex_search = re.search(regex_list[i], text_upper)
+        
+        if(regex_search):
+            
+            break
+        
+    if(regex_search):
+        
+        if(lower_bound is not None):
+        
+            return(regex_search.start() + lower_bound)
+        
+        else:
+            
+            return(regex_search.start())
+    
+    else:
+        return(-1)
+    
+    
+    
+def has_exhibit_break(text, cover_page_start, signature_start):
+    
+    exhibit_st = get_exhibit_sec_start(text, cover_page_start, signature_start)
+    
+    if(exhibit_st != -1):
+        
+        return(True)
+    
+    else:
+        
+        return(False)    
+    
+ 
+ 
+ 
+def find_all_orthodox_q1_starts(text, exhibit_start):
+    
+    # Finds all orthodox q1s BEFORE the exhibit section if it exists in the main text
+    # (we do not want cover pages from exhibit parts)
+    
+    lst = []
+    
+    start, end = find_orthodox_cover_page_q1_start_end(text)
+    
+    while(start != -1):
+        
+        lst.append(start)
+        p_start, p_end = find_orthodox_cover_page_q1_start_end(text, end)
+        
+        if(p_start != -1):
+            
+            start = end + p_start
+            end = end + p_end
+            
+        else:
+            
+            start = -1
+            
+    if(exhibit_start is not None and exhibit_start != -1):
+        
+        result = [i for i in lst if i < exhibit_start]
+        return(result)
+
+    else:
+        
+        return(lst)
+         
+ 
+ 
     
     
 def get_key_indices(file_name, document, form_type, directory):
@@ -663,12 +1068,14 @@ def get_key_indices(file_name, document, form_type, directory):
     key_info['cover_page_last_q_end'] = [find_cover_pages_last_question(text, \
                         key_info['is_rep_q_as_items'][0], key_info['cover_page_q1_start'][0], \
                                                                         key_info['item_section_start'][0])]
-    key_info['cover_page_end'] = [find_cover_pages_end(text, key_info['is_rep_q_as_items'][0],\
-                                key_info['cover_page_q1_start'][0], key_info['item_section_start'][0])]
+    key_info['cover_page_end'] = [find_cover_pages_end(text, form_type, key_info['is_rep_q_as_items'][0],\
+                                key_info['cover_page_last_q_end'][0], key_info['item_section_start'][0])]
     
     key_info['num_cusip_b_items'] = [num_cusip_sedol_before_index(text, \
                                                                   index = key_info['item_section_start'][0])]
-    key_info['signature_start'] = [get_signatures_sec_start(text)]
+    key_info['signature_start'] = [get_signatures_sec_start(text, key_info['item_section_start'][0])]
+    key_info['exhibit_start'] = [get_exhibit_sec_start(text, key_info['signature_start'][0])]
+    key_info['main_text_length'] = [len(text)]
     
     if(key_info['cover_page_start'][0] != -1 and key_info['item_section_start'][0] != -1\
       and key_info['item_section_start'][0] > key_info['cover_page_start'][0]):
@@ -681,11 +1088,12 @@ def get_key_indices(file_name, document, form_type, directory):
     
     key_info['amendment_statement_start'] = find_amendment_statement_start(text, form_type, \
                     lower_bound = amend_l_bound, upper_bound = key_info['item_section_start'][0])
+
     
     
     key_info_df = pd.DataFrame(key_info)
     
-    return(key_info_df) 
+    return(key_info_df)
     
     
 def write_indexes_to_table(file_name, document, form_type, directory, engine):
