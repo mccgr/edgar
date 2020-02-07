@@ -957,11 +957,11 @@ def get_exhibit_sec_start(text, lower_bound = None, upper_bound = None):
     
     text_upper = get_bounded_text(text, lower_bound, upper_bound).upper()
     
-    regex0 = '\n\s*EXHIBIT\s+INDEX'
+    regex0 = '\n\s*EXHIBIT\s+INDEX\s*\n'
     
-    regex1 = '\n\s*EXHIBIT\s+[0-9A-Z](:)?'
+    regex1 = '\n\s*EXHIBIT\s+[0-9A-Z](:)?\s*\n'
     
-    regex2 = '\n\s*APPENDIX\s+[0-9A-Z](:)?'
+    regex2 = '\n\s*APPENDIX\s+[0-9A-Z](:)?\s*\n'
     
     regex_list = [regex0, regex1, regex2]
     
@@ -1036,9 +1036,66 @@ def find_all_orthodox_q1_starts(text, exhibit_start):
     else:
         
         return(lst)
+
+
+def has_jumbled_order(text, form_type, exhibit_start):
+    
+    # This function is defined to be true if there are item sections or signature sections in the parts of the
+    # text which are before the last instance of an orthodox q1 of a cover page (hence "jumbled")
+    # this can include cases where for instance, an order goes cover_page -> items -> signatures -> 
+    # cover_page -> items -> signatures 
+    
+    result = False # Assume false till proven otherwise
+    
+    q1_starts = find_all_orthodox_q1_starts(text, exhibit_start)
+
+    for i in range(len(q1_starts)):
+
+        if(i == 0):
+
+            segment = get_bounded_text(text, 0, q1_starts[i])
+
+        else:
+
+            segment = get_bounded_text(text, q1_starts[i-1], q1_starts[i])
+
+        has_items = (get_item_section_start(segment, form_type) != -1)
+        has_signatures = (get_signatures_sec_start(segment) != -1)
+
+        if(has_items or has_signatures):
+
+            result = True
+            break
+
+    return(result)         
          
- 
- 
+         
+def is_schedule_to(text, lower_bound = None, upper_bound = None):
+    
+    text_raised = get_bounded_text(text, lower_bound, upper_bound).upper()
+    
+    if(re.search('\n\s*(?:SCHEDULE|SC)\s+TO(/A)?\s*\n', text_raised)):
+        
+        return(True)
+    
+    else:
+        
+        return(False)
+        
+        
+        
+def has_table_of_contents(text, lower_bound = None, upper_bound = None):
+    
+    text_raised = get_bounded_text(text, lower_bound, upper_bound).upper()
+    
+    if(re.search('\n\s*TABLE\s+OF\s+CONTENTS\s*\n', text_raised)):
+        
+        return(True)
+    
+    else:
+        
+        return(False)
+        
     
     
 def get_key_indices(file_name, document, form_type, directory):
@@ -1057,6 +1114,10 @@ def get_key_indices(file_name, document, form_type, directory):
         
         key_info['cover_page_q1_start'] = [cover_page_start_is_rep_as_q(text, form_type, \
                                                 lower_bound = key_info['title_page_end_lower_bound'][0])]
+    
+    key_info['is_schedule_to'] = [is_schedule_to(text)]
+    key_info['has_table_of_contents'] = [has_table_of_contents(text)]
+    
     key_info['num_cusip_sedol_b_q1'] = [num_cusip_sedol_before_index(text, \
                                                                     key_info['cover_page_q1_start'][0])]
     key_info['cover_page_start'] = [cover_page_start(text, form_type, \
@@ -1088,12 +1149,51 @@ def get_key_indices(file_name, document, form_type, directory):
     
     key_info['amendment_statement_start'] = find_amendment_statement_start(text, form_type, \
                     lower_bound = amend_l_bound, upper_bound = key_info['item_section_start'][0])
-
     
+    key_info['has_jumbled_order'] = [has_jumbled_order(text, form_type, key_info['exhibit_start'][0])]
+    
+    key_info['has_exhibit_break'] = [has_exhibit_break(text, key_info['cover_page_start'][0],\
+                                                       key_info['signature_start'][0])]
+    
+
     
     key_info_df = pd.DataFrame(key_info)
     
     return(key_info_df)
+    
+
+
+def get_file_list_df(engine):
+
+    inspector = inspect(engine)
+    
+    if('sc13dg_indexes' in inspector.get_table_names(schema='edgar')):
+        
+        sql = """SELECT a.file_name, a.document, b.form_type FROM edgar.filing_docs_processed AS a
+                 INNER JOIN edgar.filings AS b
+                 USING(file_name)
+                 LEFT JOIN edgar.sc13dg_indexes AS c
+                 USING(file_name, document)
+                 WHERE b.form_type IN ('SC 13D', 'SC 13D/A', 'SC 13G', 'SC 13G/A')
+                 AND a.downloaded
+                 AND right(a.file_name, 24) = a.document
+                 AND c.file_name IS NULL
+              """
+        
+    else:
+        
+        sql = """SELECT a.file_name, a.document, b.form_type FROM edgar.filing_docs_processed AS a
+                 INNER JOIN edgar.filings AS b
+                 USING(file_name)
+                 WHERE b.form_type IN ('SC 13D', 'SC 13D/A', 'SC 13G', 'SC 13G/A')
+                 AND a.downloaded
+                 AND right(a.file_name, 24) = a.document
+              """
+        
+    df = pd.read_sql(sql, engine)
+    
+    return(df)
+    
     
     
 def write_indexes_to_table(file_name, document, form_type, directory, engine):
@@ -1108,16 +1208,14 @@ def write_indexes_to_table(file_name, document, form_type, directory, engine):
         
         df = pd.DataFrame({'file_name': [file_name], 'document': [document], 'form_type': [form_type], \
               'title_page_end_lower_bound': [-2], 'cover_page_q1_start': [-2], 'is_rep_q_as_items': [-2],\
-              'num_cusip_sedol_b_q1': [-2], 'cover_page_start': [-2], 'item_section_start': [-2], \
-              'cover_page_last_q_end': [-2], 'cover_page_end': [-2], 'num_cusip_b_items': [-2],\
-              'signature_start': [-2], 'amendment_statement_start': [-2], 'success': [False]})
+              'is_schedule_to': [-2],  'has_table_of_contents': [-2], 'num_cusip_sedol_b_q1': [-2],\
+              'cover_page_start': [-2], 'item_section_start': [-2], 'cover_page_last_q_end': [-2],\
+              'cover_page_end': [-2], 'num_cusip_b_items': [-2], 'signature_start': [-2], \
+              'exhibit_start': [-2], 'main_text_length': [-2], 'amendment_statement_start': [-2],\
+              'has_jumbled_order': [-2], 'has_exhibit_break': [-2], 'success': [False]})
         
         df.to_sql('sc13dg_indexes', engine, schema="edgar", if_exists="append", index=False)    
     
     
     
-    
-    
-    
-    
-    
+
