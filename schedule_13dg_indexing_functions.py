@@ -9,6 +9,14 @@ from sqlalchemy import create_engine, inspect
 import datetime as dt
 
 
+dbname = os.getenv("PGDATABASE")
+
+host = os.getenv("PGHOST", "localhost")
+
+conn_string = "postgresql://" + host + "/" + dbname
+
+
+
 
 def get_index_url(file_name): 
     
