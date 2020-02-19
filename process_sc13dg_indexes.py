@@ -6,6 +6,8 @@ from schedule_13dg_indexing_functions import get_file_list_df, write_indexes_to_
 from multiprocess import Pool
 import datetime as dt
 
+function_timeout = 60
+
 engine = create_engine(conn_string)
 
 directory = os.getenv("EDGAR_DIR")
@@ -32,16 +34,16 @@ for i in range(num_batches):
         
         end = (i + 1) * batch_size 
     
-    success = pd.Series(p.map(lambda i: write_indexes_to_table(full_df.loc[i, 'file_name'], full_df.loc[i, 'document'], full_df.loc[i, 'form_type'], directory, engine) , range(start, end)))
+    success = pd.Series(p.map(lambda i: write_indexes_to_table(full_df.loc[i, 'file_name'], full_df.loc[i, 'document'],\
+                            full_df.loc[i, 'form_type'], directory, engine, function_timeout) , range(start, end)))
     time_now = dt.datetime.now()
     time_taken = time_now - start_time
     num_success = num_success + success.sum()
 
     if(i % 50 == 0 or i == num_batches - 1):
         
-        print(num_success + ' filings successfully process from ' + end)
-        print('Time taken: ' + time_taken)
+        print(str(num_success) + ' filings successfully process from ' + str(end))
+        print('Time taken: ' + str(time_taken))
         
         
 p.close()        
-        
