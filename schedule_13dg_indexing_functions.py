@@ -7,6 +7,48 @@ import re
 from codecs import decode
 from sqlalchemy import create_engine, inspect
 import datetime as dt
+from pathos.multiprocessing import Pool
+import signal
+
+
+
+class TimedOutExc(Exception):
+    """
+    Raised when a timeout happens
+    """
+
+def timeout(timeout):
+    """
+    Return a decorator that raises a TimedOutExc exception
+    after timeout seconds, if the decorated function did not return.
+    """
+
+    def decorate(f):
+
+        def handler(signum, frame):
+            raise TimedOutExc()
+
+        def new_f(*args, **kwargs):
+
+            old_handler = signal.signal(signal.SIGALRM, handler)
+            signal.alarm(timeout)
+
+            result = f(*args, **kwargs)  # f() always returns, in this scheme
+
+            signal.signal(signal.SIGALRM, old_handler)  # Old signal handler is restored
+            signal.alarm(0)  # Alarm removed
+
+            return result
+
+        new_f.__name__ = f.__name__
+        return new_f
+
+    return decorate
+
+
+
+
+
 
 
 dbname = os.getenv("PGDATABASE")
@@ -99,9 +141,9 @@ def clean_text(text):
 
 def get_bounded_text(text, lower_bound = None, upper_bound = None):
     
-    if(lower_bound is not None):
+    if(lower_bound is not None and lower_bound != -1):
         
-        if(upper_bound is not None):
+        if(upper_bound is not None and upper_bound != -1):
             
             if(lower_bound >= upper_bound):
                 
@@ -117,23 +159,37 @@ def get_bounded_text(text, lower_bound = None, upper_bound = None):
         
     else:
         
-        if(upper_bound is not None):
+        if(upper_bound is not None and upper_bound != -1):
             
-            return(text[lower_bound:upper_bound])
+            return(text[:upper_bound])
         
         else:
             
             return(text)
 
+
    
     
 def get_main_doc_text(file_name, document, directory):
-  
+     
     full_text = clean_text(get_file_text_from_directory(file_name, document, directory))
-    soup = BeautifulSoup(full_text, 'html5lib')
-    main_doc_text = soup.find(["document", "DOCUMENT"]).get_text()
     
-    return(main_doc_text)
+    try:
+        soup = BeautifulSoup(full_text, 'html5lib')
+        main_doc_text = soup.find(["document", "DOCUMENT"]).get_text()
+        
+    except:
+        
+        try:
+            soup = BeautifulSoup(full_text, 'lxml')
+            main_doc_text = soup.find(["document", "DOCUMENT"]).get_text()
+            
+        except:
+            
+            soup = BeautifulSoup(full_text, 'html.parser')
+            main_doc_text = soup.find(["document", "DOCUMENT"]).get_text()
+    
+    return(main_doc_text)            
     
    
    
@@ -264,6 +320,40 @@ def find_regex1_end(text):
         # Use -1 to distinguish cases where regex was not found from other failures
         return(-1)
         
+
+def instructions_included(text, form_type, lower_bound = None, upper_bound = None):
+    
+    text_raised = get_bounded_text(text, lower_bound, upper_bound).upper()
+    
+    regex0 = '\n\s*INSTRUCTIONS\s+FOR\s+(SCHEDULE|SC)\s+13[DG](/A)?'
+    regex1 = '\n\s*INSTRUCTIONS\s+FOR\s+COVER\s+PAGE'
+    regex2 = '\n\s*GENERAL\s+INSTRUCTIONS'
+    
+    re_list = [regex0, regex1, regex2]
+    
+    result_bool = False # Assume False till proven otherwise
+    result_index = -1 # Likewise, assume -1 till there is an index for a search found
+    
+    for pattern in re_list:
+        
+        search = re.search(pattern, text_raised)
+        
+        if(search):
+            
+            result_bool = True
+            
+            if(lower_bound is not None and lower_bound != -1):
+            
+                result_index = search.start() + lower_bound
+                
+            else:
+                
+                result_index = search.start()
+                
+            break
+            
+    return(result_bool, result_index)
+
         
             
             
@@ -527,13 +617,25 @@ def find_cover_pages_last_question(text, rep_q_as_items = None,  lower_bound = N
     
     if(rep_q_as_items):
         
-        regex = 'ITEM\s*[\(\|]?\s*1[24]\s*[\)\|]?\s*[\:\.]?'
+        regex = '\n\s*ITEM\s*[\(\|]?\s*1[24]\s*[\)\|]?\s*[\:\.]?'
+        
+        search = re.search(regex, text_raised)
         
     else:
     
-        regex = '[\(\|]?\s*1[24]\s*[\)\|]?\s*[\:\.]?\s*TYPE[S]?\s+OF\s+REPORTING\s+PERSON[S]?[\*]?\s*(\(SEE\s+INSTRUCTIONS\))?'
-
-    search = re.search(regex, text_raised)
+        regex0 = '\n\s*[\(\|]?\s*1[24]\s*[\)\|]?\s*[\:\.]?\s*TYPE[S]?\s+OF\s+REPORTING\s+PERSON[S]?[\*]?\s*(\(SEE\s+INSTRUCTIONS\))?'
+        regex1 = '\n\s*TYPE[S]?\s+OF\s+REPORTING\s+PERSON[S]?[\*]?\s*(\(SEE\s+INSTRUCTIONS\))?[\(\|]?\s*1[24]\s*[\)\|]?\s*[\:\.]?\s'
+        
+        regex_list = [regex0, regex1]
+        
+        for pat in regex_list:
+        
+            search = re.search(pat, text_raised)
+        
+            if(search is not None):
+            
+                regex = pat
+                break
 
     if(search is None):
         return(None)
@@ -549,7 +651,8 @@ def find_cover_pages_last_question(text, rep_q_as_items = None,  lower_bound = N
         
         end = end + lower_bound
         
-    return(end)       
+    return(end)                  
+            
         
 
     
@@ -832,33 +935,33 @@ def get_item_section_start(text, form_type):
     
     if(re.search('SC\s+13D', form_type)):
         
-        re_list = ['\n\s*[#\.\;\:]?\s*1[#\.\;\:]?\s*security\s+and\s+issuer',
-                   '\n\s*[#\.\;\:]?\s*2[#\.\;\:]?\s*identity\s+and\s+background',
-                   '\n\s*[#\.\;\:]?\s*3[#\.\;\:]?\s*source\s+and\s+amount\s+of\s+funds',
-                   '\n\s*[#\.\;\:]?\s*4[#\.\;\:]?\s*purpose\s+of\s+transaction',
-                   '\n\s*[#\.\;\:]?\s*5[#\.\;\:]?\s*interest\s+in\s+securities\s+of\s+the\s+issuer',
-                   '\n\s*[#\.\;\:]?\s*6[#\.\;\:]?\s*contracts,\s+arrangements,\s+understandings',
-                   '\n\s*[#\.\;\:]?\s*7[#\.\;\:]?\s*material\s+to\s+be\s+filed\s+as\s+exhibits'
+        re_list = ['\n\s*[item]*\s*([#\.\;\:]?\s*1[#\.\;\:]?)?\s*security\s+and\s+issuer',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*2[#\.\;\:]?)?\s*identity\s+and\s+background',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*3[#\.\;\:]?)?\s*source\s+and\s+amount\s+of\s+funds',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*4[#\.\;\:]?)?\s*purpose\s+of\s+transaction',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*5[#\.\;\:]?)?\s*interest\s+in\s+securities\s+of\s+the\s+issuer',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*6[#\.\;\:]?)?\s*contracts,\s+arrangements,\s+understandings',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*7[#\.\;\:]?)?\s*material\s+to\s+be\s+filed\s+as\s+exhibits'
                   ]
                        
         
     elif(re.search('SC\s+13G', form_type)):
         
-        re_list = ['\n\s*[#\.\;\:]?\s*1[#\.\;\:]?[\(]?\s*a[\)]?[#\.\;\:]?\s*name\s+of\s+issuer',
-                   '\n\s*[#\.\;\:]?\s*1[#\.\;\:]?[\(]?\s*b[\)]?[#\.\;\:]?\s*address\s+of\s+issuer',
-                   '\n\s*[#\.\;\:]?\s*2[#\.\;\:]?[\(]?\s*a[\)]?[#\.\;\:]?\s*name[s]?\s+of\s+person[s]?\s+filing',
-                   '\n\s*[#\.\;\:]?\s*2[#\.\;\:]?[\(]?\s*b[\)]?[#\.\;\:]?\s*address\s+of\s+principle',
-                   '\n\s*[#\.\;\:]?\s*2[#\.\;\:]?[\(]?\s*c[\)]?[#\.\;\:]?\s*citizenship',
-                   '\n\s*[#\.\;\:]?\s*2[#\.\;\:]?[\(]?\s*d[\)]?[#\.\;\:]?\s*title\s+of\s+class',
-                   '\n\s*[#\.\;\:]?\s*2[#\.\;\:]?[\(]?\s*e[\)]?[#\.\;\:]?\s*cusip\s+number',
-                   '\n\s*[#\.\;\:]?\s*3[#\.\;\:]?\s*if\s+this\s+statement\s+is\s+filed\s+pursuant',
-                   '\n\s*[#\.\;\:]?\s*4[#\.\;\:]?\s*ownership',
-                   '\n\s*[#\.\;\:]?\s*5[#\.\;\:]?\s*ownership\s+of\s+five',
-                   '\n\s*[#\.\;\:]?\s*6[#\.\;\:]?\s*ownership\s+of\s+more',
-                   '\n\s*[#\.\;\:]?\s*7[#\.\;\:]?\s*identification\s+and\s+classification',
-                   '\n\s*[#\.\;\:]?\s*8[#\.\;\:]?\s*identification\s+and\s+classification',
-                   '\n\s*[#\.\;\:]?\s*9[#\.\;\:]?\s*notice\s+of\s+dissolution',
-                   '\n\s*[#\.\;\:]?\s*10[#\.\;\:]?\s*certification'
+        re_list = ['\n\s*[item]*\s*([#\.\;\:]?\s*1[#\.\;\:]?[\(]?\s*a[\)]?)?[#\.\;\:]?\s*name\s+of\s+issuer',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*1[#\.\;\:]?[\(]?\s*b[\)]?)?[#\.\;\:]?\s*address\s+of\s+issuer',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*2[#\.\;\:]?[\(]?\s*a[\)]?)?[#\.\;\:]?\s*name[s]?\s+of\s+person[s]?\s+filing',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*2[#\.\;\:]?[\(]?\s*b[\)]?)?[#\.\;\:]?\s*address\s+of\s+principle',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*2[#\.\;\:]?[\(]?\s*c[\)]?)?[#\.\;\:]?\s*citizenship',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*2[#\.\;\:]?[\(]?\s*d[\)]?)?[#\.\;\:]?\s*title\s+of\s+class',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*2[#\.\;\:]?[\(]?\s*e[\)]?)?[#\.\;\:]?\s*cusip\s+number',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*3[#\.\;\:]?)?\s*if\s+this\s+statement\s+is\s+filed\s+pursuant',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*4[#\.\;\:]?)?\s*ownership',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*5[#\.\;\:]?)?\s*ownership\s+of\s+five',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*6[#\.\;\:]?)?\s*ownership\s+of\s+more',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*7[#\.\;\:]?)?\s*identification\s+and\s+classification',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*8[#\.\;\:]?)?\s*identification\s+and\s+classification',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*9[#\.\;\:]?)?\s*notice\s+of\s+dissolution',
+                   '\n\s*[item]*\s*([#\.\;\:]?\s*10[#\.\;\:]?)?\s*certification'
                   ]
         
     else:
@@ -883,7 +986,20 @@ def get_item_section_start(text, form_type):
             return(cover_pages_end + search.start() + num_to_item)  
         
         else:
-            return(-1) # ie. assume no Item section (this probably happens with 13D/A and 13G/A)
+            result = -1 # ie. assume no Item section (this probably happens with 13D/A and 13G/A) if no matches in
+                          # re_list
+                
+            for i in range(len(re_list)):
+                
+                search = re.search(re_list[i], text_lowered)
+                
+                if(search):
+                    
+                    result = cover_pages_end + search.start()
+                    break
+            
+            
+            return(result)     
     
     else:
         
@@ -910,15 +1026,11 @@ def get_item_section_start(text, form_type):
                 
                 if(search):
                     
-                    search_str = search.group(0)
-            
-                    num_to_item = re.search('item', search_str).start()
-                    
-                    result = search.start() + num_to_item
+                    result = search.start()
                     break
             
             
-            return(result)     
+            return(result)    
     
     
 def get_signatures_sec_start(text, lower_bound = None, upper_bound = None):
@@ -1010,6 +1122,71 @@ def has_exhibit_break(text, cover_page_start, signature_start):
         
         return(False)    
     
+
+def find_orthodox_cover_page_q1_start_end(text, lower_bound = None, upper_bound = None):
+
+    text_raised = get_bounded_text(text, lower_bound, upper_bound).upper()
+
+    regex0 = '\s+[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?\s*(.){0,50}\s*' + \
+             'NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?\s+(?:REPORTING|ABOVE|REPORT)'
+    
+    regex1 = '\s+[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?\s*(.){0,50}\s*' + \
+             'NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?(\s+(?:REPORTING|ABOVE|REPORT))?\s+' + \
+             'PERSON[\(]?[S]?[\)]?'
+
+    regex2 = '\s+[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?\s*(.){0,50}\s*' + \
+             'NAME[\(]?[S]?[\)]?\s+(?:AND|OF|OR)(\s+I[\.]?R[\.]?S)?\s+IDENTIFICATION\s+NO[\(]?[S]?[\)]?\.'
+    
+    regex3 = '(NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?(\s+(?:REPORTING|ABOVE|REPORT))?\s+' + \
+             'PERSON[\(]?[S]?[\)]?\s+)?[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.\|]{0,1}\s*' + \
+             'I\.R\.S\.\s+IDENTIFICATION\s+NO[\(]?[S]?[\)]?\.\s+(?:OF|OR)\s+(\s+THE)?ABOVE\s+' + \
+             'PERSON[\(]?[S]?[\)]?'
+    
+    regex4 = '(NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?(\s+(?:REPORTING|ABOVE|REPORT))?\s+' + \
+             'PERSON[\(]?[S]?[\)]?\s+)?[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.\|]{0,1}\s*S\.S\.\s+OR\s+' + \
+             'I\.R\.S\.\s+IDENTIFICATION\s+NO[\(]?[S]?[\)]?\.\s+(?:OF|OR)(\s+THE)?\s+' + \
+             'ABOVE\s+PERSON[\(]?[S]?[\)]?'
+    
+    regex5 = '[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?\s*' + \
+             'NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?\s+FILING\s+(?:PARTY|PARTIES|PERSON|PERSONS)'
+    
+    regex6 = 'NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?(\s+(?:REPORTING|ABOVE|REPORT))?\s+' + \
+             'PERSON[\(]?[S]?[\)]?\s+(S\.S\.\s+OR\s+I\.R\.S\.\s+IDENTIFICATION\s+NO[\(]?[S]?[\)]?\.\s+' + \
+             '(?:OF|OR)(\s+THE)?\s+ABOVE\s+PERSON[\(]?[S]?[\)]?)?' + \
+             '\s+[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?'
+    
+    
+    regex7 = '\n\s*[\(\|]?\s1\s?[\)\|]?\s*[:\.]{0,1}([A-Z0-9\s\.\(\)_]?)+?' + \
+             '[\(\|]?\s2\s?[\)\|]?\s*[:\.]{0,1}([A-Z0-9\s\.\(\)_]?)+?' + \
+             '[\(\|]?\s3\s?[\)\|]?\s*[:\.]{0,1}\s+(.)+\s*\(SEC USE ONLY\)'
+    
+    regex8 = 'NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?\s+(?:REPORTING|ABOVE|REPORT)'
+    
+    regex9 = 'NAME[\(]?[S]?[\)]?\s+(?:AND|OF|OR)(\s+I[\.]?R[\.]?S)?\s+IDENTIFICATION\s+NO[\(]?[S]?[\)]?.'
+    
+    regex10 = '\s+[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?\s*(.){0,50}\s*' + \
+              'NAME[\(]?[S]?[\)]?\s+(?:AND|OF|OR)(\s+I[\.]?R[\.]?S)?\s+NUMBER\s+OF\s+REPORTING\s+PERSON[S]?'
+    
+    
+    regex_list = [regex0, regex1, regex2, regex3, regex4, regex5, regex6, regex7, regex8, regex9, regex10]
+    
+    
+    for i in range(len(regex_list)):
+        
+        search = re.search(regex_list[i], text_raised)
+        
+        if(search):
+            
+            break
+
+    if(search):
+        
+        return(search.start(), search.end())
+    
+    else:
+        
+        return(-1, -1)
+
  
  
  
@@ -1077,6 +1254,9 @@ def has_jumbled_order(text, form_type, exhibit_start):
 
     return(result)         
          
+
+
+
          
 def is_schedule_to(text, lower_bound = None, upper_bound = None):
     
@@ -1106,72 +1286,94 @@ def has_table_of_contents(text, lower_bound = None, upper_bound = None):
         
     
     
-def get_key_indices(file_name, document, form_type, directory):
+def get_key_indices(file_name, document, form_type, directory, function_timeout):
     
-    key_info = {}
+    try:
     
-    text = get_main_doc_text(file_name, document, directory)
+        def handler(signum, frame):
+            raise TimedOutExc()
     
-    key_info['file_name'] = [file_name]
-    key_info['document'] = [document]
-    key_info['form_type'] = [form_type]
-    key_info['title_page_end_lower_bound'] = [find_title_page_end(text)]
-    key_info['cover_page_q1_start'] = [find_orthodox_cover_page_q1_start(text)]
-    key_info['is_rep_q_as_items'] = [is_rep_q_as_items(text, key_info['cover_page_q1_start'][0])]
-    if(key_info['is_rep_q_as_items'][0]):
+        old_handler = signal.signal(signal.SIGALRM, handler)
+        signal.alarm(function_timeout)
+        key_info = {}
         
-        key_info['cover_page_q1_start'] = [cover_page_start_is_rep_as_q(text, form_type, \
-                                                lower_bound = key_info['title_page_end_lower_bound'][0])]
-    
-    key_info['is_schedule_to'] = [is_schedule_to(text)]
-    key_info['has_table_of_contents'] = [has_table_of_contents(text)]
-    
-    key_info['num_cusip_sedol_b_q1'] = [num_cusip_sedol_before_index(text, \
-                                                                    key_info['cover_page_q1_start'][0])]
-    key_info['cover_page_start'] = [cover_page_start(text, form_type, \
-            cover_page_q1 = key_info['cover_page_q1_start'][0], \
-                                                     rep_q_as_items = key_info['is_rep_q_as_items'][0])]
-    
-    
-    key_info['item_section_start'] = [get_item_section_start(text, form_type)]
-    key_info['cover_page_last_q_end'] = [find_cover_pages_last_question(text, \
-                        key_info['is_rep_q_as_items'][0], key_info['cover_page_q1_start'][0], \
-                                                                        key_info['item_section_start'][0])]
-    key_info['cover_page_end'] = [find_cover_pages_end(text, form_type, key_info['is_rep_q_as_items'][0],\
-                                key_info['cover_page_last_q_end'][0], key_info['item_section_start'][0])]
-    
-    key_info['num_cusip_b_items'] = [num_cusip_sedol_before_index(text, \
-                                                                  index = key_info['item_section_start'][0])]
-    key_info['signature_start'] = [get_signatures_sec_start(text, key_info['item_section_start'][0])]
-    key_info['exhibit_start'] = [get_exhibit_sec_start(text, key_info['signature_start'][0])]
-    key_info['main_text_length'] = [len(text)]
-    
-    if(key_info['cover_page_start'][0] != -1 and key_info['item_section_start'][0] != -1\
-      and key_info['item_section_start'][0] > key_info['cover_page_start'][0]):
+        text = get_main_doc_text(file_name, document, directory)
         
-        amend_l_bound = key_info['cover_page_start'][0]
+        key_info['file_name'] = [file_name]
+        key_info['document'] = [document]
+        key_info['form_type'] = [form_type]
+        key_info['title_page_end_lower_bound'] = [find_title_page_end(text)]
+        key_info['cover_page_q1_start'] = [find_orthodox_cover_page_q1_start(text)]
+        key_info['is_rep_q_as_items'] = [is_rep_q_as_items(text, key_info['cover_page_q1_start'][0])]
+        if(key_info['is_rep_q_as_items'][0]):
+            
+            key_info['cover_page_q1_start'] = [cover_page_start_is_rep_as_q(text, form_type, \
+                                                    lower_bound = key_info['title_page_end_lower_bound'][0])]
         
-    else:
+        key_info['is_schedule_to'] = [is_schedule_to(text)]
+        key_info['has_table_of_contents'] = [has_table_of_contents(text)]
         
-        amend_l_bound = None
+        key_info['num_cusip_sedol_b_q1'] = [num_cusip_sedol_before_index(text, \
+                                                                        key_info['cover_page_q1_start'][0])]
+        key_info['cover_page_start'] = [cover_page_start(text, form_type, \
+                cover_page_q1 = key_info['cover_page_q1_start'][0], \
+                                                         rep_q_as_items = key_info['is_rep_q_as_items'][0])]
+        
+        
+        key_info['item_section_start'] = [get_item_section_start(text, form_type)]
+        key_info['cover_page_last_q_end'] = [find_cover_pages_last_question(text, \
+                            key_info['is_rep_q_as_items'][0], key_info['cover_page_q1_start'][0], \
+                                                                            key_info['item_section_start'][0])]
+        key_info['cover_page_end'] = [find_cover_pages_end(text, form_type, key_info['is_rep_q_as_items'][0],\
+                                    key_info['cover_page_last_q_end'][0], key_info['item_section_start'][0])]
+        
+        key_info['num_cusip_b_items'] = [num_cusip_sedol_before_index(text, \
+                                                                      index = key_info['item_section_start'][0])]
+        key_info['signature_start'] = [get_signatures_sec_start(text, key_info['item_section_start'][0])]
+        key_info['exhibit_start'] = [get_exhibit_sec_start(text, key_info['signature_start'][0])]
+        key_info['main_text_length'] = [len(text)]
+        
+        if(key_info['cover_page_start'][0] != -1 and key_info['item_section_start'][0] != -1\
+          and key_info['item_section_start'][0] > key_info['cover_page_start'][0]):
+            
+            amend_l_bound = key_info['cover_page_start'][0]
+            
+        else:
+            
+            amend_l_bound = None
+        
+        key_info['explanatory_statement_start'] = find_explanatory_statement_start(text, lower_bound = amend_l_bound, upper_bound = key_info['item_section_start'][0])
+        
+        key_info['has_jumbled_order'] = [has_jumbled_order(text, form_type, key_info['exhibit_start'][0])]
+        
+        key_info['has_exhibit_break'] = [has_exhibit_break(text, key_info['cover_page_start'][0],\
+                                                           key_info['signature_start'][0])]
+        
     
-    key_info['amendment_statement_start'] = find_amendment_statement_start(text, form_type, \
-                    lower_bound = amend_l_bound, upper_bound = key_info['item_section_start'][0])
-    
-    key_info['has_jumbled_order'] = [has_jumbled_order(text, form_type, key_info['exhibit_start'][0])]
-    
-    key_info['has_exhibit_break'] = [has_exhibit_break(text, key_info['cover_page_start'][0],\
-                                                       key_info['signature_start'][0])]
-    
+        
+        key_info_df = pd.DataFrame(key_info)
+        key_info_df['success'] = True
+        signal.signal(signal.SIGALRM, old_handler)  # Old signal handler is restored
+        signal.alarm(0)  # Alarm removed
+        
+        return(key_info_df)
+        
+    except:
+      
+        df = pd.DataFrame({'file_name': [file_name], 'document': [document], 'form_type': [form_type], \
+                  'title_page_end_lower_bound': [-2], 'cover_page_q1_start': [-2], 'is_rep_q_as_items': [None],\
+                  'is_schedule_to': [None],  'has_table_of_contents': [None], 'num_cusip_sedol_b_q1': [-2],\
+                  'cover_page_start': [-2], 'item_section_start': [-2], 'cover_page_last_q_end': [-2],\
+                  'cover_page_end': [-2], 'num_cusip_b_items': [-2], 'signature_start': [-2], \
+                  'exhibit_start': [-2], 'main_text_length': [-2], 'explanatory_statement_start': [-2],\
+                  'has_jumbled_order': [None], 'has_exhibit_break': [None], 'success': [False]})
+                  
+        return(df)
 
     
-    key_info_df = pd.DataFrame(key_info)
-    
-    return(key_info_df)
-    
 
 
-def get_file_list_df(engine):
+def get_file_list_df(engine, num_files = None):
 
     inspector = inspect(engine)
     
@@ -1197,6 +1399,10 @@ def get_file_list_df(engine):
                  AND a.downloaded
                  AND right(a.file_name, 24) = a.document
               """
+              
+    if(num_files is not None):
+      
+        sql = sql + " LIMIT " + str(num_files)
         
     df = pd.read_sql(sql, engine)
     
@@ -1204,26 +1410,44 @@ def get_file_list_df(engine):
     
     
     
-def write_indexes_to_table(file_name, document, form_type, directory, engine):
+def write_indexes_to_table(file_name, document, form_type, directory, engine, function_timeout):
     
+    connection = engine.connect()
+  
     try:
-        
-        df = get_key_indices(file_name, document, form_type, directory)
-        df['success'] = True
-        df.to_sql('sc13dg_indexes', engine, schema="edgar", if_exists="append", index=False)
+  
+        df = get_key_indices(file_name, document, form_type, directory, function_timeout)
+        df.to_sql('sc13dg_indexes', connection, schema="edgar", if_exists="append", index=False)
+        result = df.loc[0, 'success']
         
     except:
+      
+        result = False
         
-        df = pd.DataFrame({'file_name': [file_name], 'document': [document], 'form_type': [form_type], \
-              'title_page_end_lower_bound': [-2], 'cover_page_q1_start': [-2], 'is_rep_q_as_items': [-2],\
-              'is_schedule_to': [-2],  'has_table_of_contents': [-2], 'num_cusip_sedol_b_q1': [-2],\
-              'cover_page_start': [-2], 'item_section_start': [-2], 'cover_page_last_q_end': [-2],\
-              'cover_page_end': [-2], 'num_cusip_b_items': [-2], 'signature_start': [-2], \
-              'exhibit_start': [-2], 'main_text_length': [-2], 'amendment_statement_start': [-2],\
-              'has_jumbled_order': [-2], 'has_exhibit_break': [-2], 'success': [False]})
+    finally:
         
-        df.to_sql('sc13dg_indexes', engine, schema="edgar", if_exists="append", index=False)    
+        connection.close()
+        return(result)
     
     
-    
-
+def process_batch(df, directory, engine, num_cores = 12):
+  
+    p = Pool(num_cores)
+  
+    try:
+      
+        success = pd.Series(p.map(lambda i: write_indexes_to_table(df.loc[i, 'file_name'], df.loc[i, 'document'],\
+                                df.loc[i, 'form_type'], directory, engine),\
+                              range(df.shape[0])), ignore_index = True)
+        p.close()
+        
+        num_success = success.sum()
+        return(num_success)
+      
+    except Exception as e:
+      
+        print(e)
+        p.close()
+        return(None)
+  
+  
