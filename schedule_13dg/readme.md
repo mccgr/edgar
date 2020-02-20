@@ -1,8 +1,8 @@
 # The indexing of Schedule 13D and Schedule 13G in the table `edgar.sc13dg_indexes`
 
-    This readme describes the table `edgar.sc13dg_indexes`. This purpose of this table is to give the indexes of the key parts of the documents, and to contain other information pertaining to the style used for the documents, so that it may be used later to extract information from the documents (such as `Cusip` numbers, or the information contained in the cover pages) in a clean and unambiguous manner. The extraction of the latter information is intended to be written into future tables in the database. 
+This readme describes the table `edgar.sc13dg_indexes`. This purpose of this table is to give the indexes of the key parts of the documents, and to contain other information pertaining to the style used for the documents, so that it may be used later to extract information from the documents (such as `Cusip` numbers, or the information contained in the cover pages) in a clean and unambiguous manner. The extraction of the latter information is intended to be written into future tables in the database. 
     
-    So far, the usefulness and cleanness of the indexes varies; some indexes are very clearly found in the vast majority of cases, whereas some are found successfully only occassionally. The functions finding these indexes sometimes use a large number of regular expressions (particularly in the case)
+So far, the usefulness and cleanness of the indexes varies; some indexes are very clearly found in the vast majority of cases, whereas some are found successfully only occassionally. The functions finding these indexes sometimes use a large number of regular expressions (particularly in the case)
     
     
     
