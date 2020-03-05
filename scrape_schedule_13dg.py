@@ -13,6 +13,52 @@ def get_txt_file_url(file_name):
     url = "https://www.sec.gov/Archives/" + file_name
     
     return(url)
+  
+  
+def get_file_path(file_name, document):
+    
+    url = re.sub("(\\d{10})-(\\d{2})-(\\d{6})\\.txt", "\\1\\2\\3", file_name)
+    
+    path = url + '/' + document
+    
+    return(path)  
+    
+    
+def get_file_text_from_directory(file_name, document, directory):
+
+    path = directory + '/' + get_file_path(file_name, document)
+    f = open(path, 'r')
+    txt = f.read()
+    f.close()
+    return(txt)
+    
+
+def get_main_doc_text_by_url(url):
+  
+    page = requests.get(url)
+    soup = BeautifulSoup(page.content, 'html.parser')
+    main_doc_text = soup.find(["document", "DOCUMENT"]).get_text()
+    
+    return(main_doc_text)
+  
+  
+def get_header(file_name, document, directory):
+  
+    full_text = get_file_text_from_directory(file_name, document, directory)
+    soup = BeautifulSoup(full_text, 'html.parser')
+    text = soup.find(["sec-header", "SEC-HEADER"]).get_text()
+    
+    return(text)  
+  
+    
+def get_main_doc_text(file_name, document, directory):
+  
+    full_text = get_file_text_from_directory(file_name, document, directory)
+    soup = BeautifulSoup(full_text, 'html5lib')
+    main_doc_text = soup.find(["document", "DOCUMENT"]).get_text()
+    
+    return(main_doc_text)
+  
     
     
 def get_sc_13_dg_doc_text(file_name):
@@ -54,6 +100,7 @@ def get_file_text(file_name):
 def find_header_end(text):
     
     return(re.search('(</SEC-HEADER>|</sec-header>)', text.upper()).end())
+
 
 
 
@@ -100,22 +147,36 @@ def find_last_search_end(regex, text):
     return(end)
 
 
-def is_rep_q_as_items(text):
+
+
+def is_rep_q_as_items(text, q1_start = None):
     
     # this function works on the basis that the the actual "items" in the real item section does not go beyond
     # Item 10. So by searching for Item 12 or 14 (in SC 13G and SC 13D respectively), we can detect whether
     # a filer has erroneously labelled the questions in the reporting pages as items
     
-    text_raised = text.upper()
+    if(q1_start is None):
+      
+        q1_start = find_orthodox_cover_page_q1_start(text)
     
-    regex = '\n\s*ITEM\s*(\.)?\s*[\(]?\s*1[24]\s*[\)]?(\.)?'
+    if(q1_start == -1):
     
-    search = re.search(regex, text_raised)
-    
-    if(search):
-        return(True)
+        text_raised = text.upper()
+        
+        regex = '\n\s*ITEM\s*(\.)?\s*[\(]?\s*1[24]\s*[\)]?(\.)?'
+        
+        search = re.search(regex, text_raised)
+        
+        if(search):
+            return(True)
+        else:
+            return(False)
+            
     else:
+      
         return(False)
+        
+        
 
 
 def find_doe_statement_end(file_name):
@@ -169,7 +230,24 @@ def find_name_address_statement_end(file_name):
     except:
         return(None)
 
-
+def is_rep_page_short_form(text):
+    
+    text_raised = text.upper()
+    
+    regex_q = '\n\s*[\(\|]?(#)?\s1\s?[\)\|]?\s*[:\.]{0,1}(.)+?' + \
+            '[\(\|]?(#)?\s2\s?[\)\|]?\s*[:\.]{0,1}'
+    
+    search = re.search(regex_q, text_raised, flags = re.DOTALL)
+    
+    regex_w = '(?:NAME|REPORTING|S\.S\.|I\.R\.S\.|FILING\s+(?:PARTY|PARTIES|PERSON|PERSONS))'
+    
+    if(re.search(regex_w, text_raised)):
+        
+        return(False)
+    
+    else:
+        
+        return(True)
 
 def get_title_page_end_lower_bound(text, upper_bound = None):
     
@@ -233,8 +311,217 @@ def get_title_page_end_upper_bound(text, rep_q_as_items = None):
             search = re.search(regex, text_raised)
 
             return(search.start())
+   
+   
+   
+def find_orthodox_cover_page_q1_start(text):
+
+    text_raised = text.upper()
+
+    
+    regex0 = '\s+[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?\s*(.){0,50}\s*' + \
+             'NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?\s+(?:REPORTING|ABOVE|REPORT)'
+    
+    regex1 = '\s+[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?\s*(.){0,50}\s*' + \
+             'NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?(\s+(?:REPORTING|ABOVE|REPORT))?\s+' + \
+             'PERSON[\(]?[S]?[\)]?'
+
+    regex2 = '\s+[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?\s*(.){0,50}\s*' + \
+             'NAME[\(]?[S]?[\)]?\s+(?:AND|OF|OR)(\s+I\.R\.S\.)?\s+IDENTIFICATION\s+NO[\(]?[S]?[\)]?\.'
+    
+    regex3 = '(NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?(\s+(?:REPORTING|ABOVE|REPORT))?\s+' + \
+             'PERSON[\(]?[S]?[\)]?\s+)?[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.\|]{0,1}\s*' + \
+             'I\.R\.S\.\s+IDENTIFICATION\s+NO[\(]?[S]?[\)]?\.\s+(?:OF|OR)\s+(\s+THE)?ABOVE\s+' + \
+             'PERSON[\(]?[S]?[\)]?'
+    
+    regex4 = '(NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?(\s+(?:REPORTING|ABOVE|REPORT))?\s+' + \
+             'PERSON[\(]?[S]?[\)]?\s+)?[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.\|]{0,1}\s*S\.S\.\s+OR\s+' + \
+             'I\.R\.S\.\s+IDENTIFICATION\s+NO[\(]?[S]?[\)]?\.\s+(?:OF|OR)(\s+THE)?\s+' + \
+             'ABOVE\s+PERSON[\(]?[S]?[\)]?'
+    
+    regex5 = '[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?\s*' + \
+             'NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?\s+FILING\s+(?:PARTY|PARTIES|PERSON|PERSONS)'
+    
+    regex6 = 'NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?(\s+(?:REPORTING|ABOVE|REPORT))?\s+' + \
+             'PERSON[\(]?[S]?[\)]?\s+(S\.S\.\s+OR\s+I\.R\.S\.\s+IDENTIFICATION\s+NO[\(]?[S]?[\)]?\.\s+' + \
+             '(?:OF|OR)(\s+THE)?\s+ABOVE\s+PERSON[\(]?[S]?[\)]?)?' + \
+             '\s+[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?'
+    
+    
+    regex7 = '\n\s*[\(\|]?\s1\s?[\)\|]?\s*[:\.]{0,1}([A-Z0-9\s\.\(\)_]?)+?' + \
+             '[\(\|]?\s2\s?[\)\|]?\s*[:\.]{0,1}([A-Z0-9\s\.\(\)_]?)+?' + \
+             '[\(\|]?\s3\s?[\)\|]?\s*[:\.]{0,1}\s+(.)+\s*\(SEC USE ONLY\)'
+    
+    regex8 = 'NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?\s+(?:REPORTING|ABOVE|REPORT)'
+    
+    regex9 = 'NAME[\(]?[S]?[\)]?\s+(?:AND|OF|OR)(\s+I\.R\.S\.)?\s+IDENTIFICATION\s+NO[\(]?[S]?[\)]?.'
+    
+    
+    regex_list = [regex0, regex1, regex2, regex3, regex4, regex5, regex6, regex7, regex8, regex9]
+    
+    start = None
+    
+    for i in range(len(regex_list)):
+        
+        search = re.search(regex_list[i], text_raised)
+        
+        if(search):
+            
+            if(start is None):
+                
+                start = search.start()
+                
+            else:
+                
+                new = search.start()
+                
+                if(new < start):
+                    
+                    start = new            
+
+    if(start):
+        
+        return(start)
+    
+    else:
+        
+        return(-1)   
             
             
+   
+def find_cover_page_q1_start(text, rep_q_as_items = None):
+    
+    if(rep_q_as_items is None):
+        rep_q_as_items = is_rep_q_as_items(text)
+
+    text_raised = text.upper()
+
+    if(rep_q_as_items):
+
+        end = re.search('ITEM\s*[#\.\:]?\s*[\(]?\s*1[24]\s*[\)]?[\.\:]?', text_raised).start()
+
+        regex = 'ITEM\s*[#\.\:]?\s*[\(]?\s*1\s*[\)]?[\.\:]?'
+
+        search = re.search(regex, text_raised[:end])
+
+        return(search.start())
+
+    else:
+        
+        regex0 = '\s+[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?\s*(.){0,50}\s*' + \
+                 'NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?\s+(?:REPORTING|ABOVE|REPORT)'
+        
+        regex1 = '\s+[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?\s*(.){0,50}\s*' + \
+                 'NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?(\s+(?:REPORTING|ABOVE|REPORT))?\s+' + \
+                 'PERSON[\(]?[S]?[\)]?'
+
+        regex2 = '\s+[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?\s*(.){0,50}\s*' + \
+                 'NAME[\(]?[S]?[\)]?\s+(?:AND|OF|OR)(\s+I\.R\.S\.)?\s+IDENTIFICATION\s+NO[\(]?[S]?[\)]?\.'
+        
+        regex3 = '(NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?(\s+(?:REPORTING|ABOVE|REPORT))?\s+' + \
+                 'PERSON[\(]?[S]?[\)]?\s+)?[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.\|]{0,1}\s*' + \
+                 'I\.R\.S\.\s+IDENTIFICATION\s+NO[\(]?[S]?[\)]?\.\s+(?:OF|OR)\s+(\s+THE)?ABOVE\s+' + \
+                 'PERSON[\(]?[S]?[\)]?'
+        
+        regex4 = '(NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?(\s+(?:REPORTING|ABOVE|REPORT))?\s+' + \
+                 'PERSON[\(]?[S]?[\)]?\s+)?[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.\|]{0,1}\s*S\.S\.\s+OR\s+' + \
+                 'I\.R\.S\.\s+IDENTIFICATION\s+NO[\(]?[S]?[\)]?\.\s+(?:OF|OR)(\s+THE)?\s+' + \
+                 'ABOVE\s+PERSON[\(]?[S]?[\)]?'
+        
+        regex5 = '[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?\s*' + \
+                 'NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?\s+FILING\s+(?:PARTY|PARTIES|PERSON|PERSONS)'
+        
+        regex6 = 'NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?(\s+(?:REPORTING|ABOVE|REPORT))?\s+' + \
+                 'PERSON[\(]?[S]?[\)]?\s+(S\.S\.\s+OR\s+I\.R\.S\.\s+IDENTIFICATION\s+NO[\(]?[S]?[\)]?\.\s+' + \
+                 '(?:OF|OR)(\s+THE)?\s+ABOVE\s+PERSON[\(]?[S]?[\)]?)?' + \
+                 '\s+[\(\|]?\s*[1L]\s*[\)\|]?\s*[:\.]{0,1}(\s*[\(\|]\s*A\s*[\)\|])?'
+        
+        
+        regex7 = '\n\s*[\(\|]?\s1\s?[\)\|]?\s*[:\.]{0,1}([A-Z0-9\s\.\(\)_]?)+?' + \
+                 '[\(\|]?\s2\s?[\)\|]?\s*[:\.]{0,1}([A-Z0-9\s\.\(\)_]?)+?' + \
+                 '[\(\|]?\s3\s?[\)\|]?\s*[:\.]{0,1}\s+(.)+\s*\(SEC USE ONLY\)'
+        
+        regex8 = 'NAME[\(]?[S]?[\)]?\s+(?:OF|OR)(\s+THE)?\s+(?:REPORTING|ABOVE|REPORT)'
+        
+        regex9 = 'NAME[\(]?[S]?[\)]?\s+(?:AND|OF|OR)(\s+I\.R\.S\.)?\s+IDENTIFICATION\s+NO[\(]?[S]?[\)]?.'
+        
+        
+        regex_list = [regex0, regex1, regex2, regex3, regex4, regex5, regex6, regex7, regex8, regex9]
+        
+        start = None
+        
+        for i in range(len(regex_list)):
+            
+            search = re.search(regex_list[i], text_raised)
+            
+            if(search):
+                
+                if(start is None):
+                    
+                    start = search.start()
+                    
+                else:
+                    
+                    new = search.start()
+                    
+                    if(new < start):
+                        
+                        start = new            
+
+        if(start):
+            
+            return(start)
+        
+        else:
+            
+            return(-1)   
+   
+   
+            
+def rep_page_start_alt(text, form_type, lower_bound = None, rep_q_as_items = None):
+    
+    if(lower_bound):
+        text_raised = text.upper()[lower_bound:]
+        
+    else:
+        lower_bound = 0
+        text_raised = text.upper()
+        
+    search = None
+    
+    if(rep_q_as_items is None):
+        
+        rep_q_as_items = is_rep_q_as_items(text)
+
+    if(re.search('SC 13D', form_type)):
+        
+        if(rep_q_as_items):
+            
+            search = re.search('\n\s*ITEM\s+[\(\|]?\s?1\s?[\)\|]?\s*[:\.]{0,1}(.)+?' + \
+                  '\n\s*ITEM\s+[\(\|]?\s?14\s?[\)\|]?\s*[:\.]{0,1}', text_raised, flags = re.DOTALL)
+            
+        else:
+            search = re.search('\n\s*[\(\|]?\s?1\s?[\)\|]?\s*[:\.]{0,1}(.)+?' + \
+                  '\n\s*[\(\|]?\s?14\s?[\)\|]?\s*[:\.]{0,1}', text_raised, flags = re.DOTALL)
+        
+    if(re.search('SC 13G', form_type)):
+        
+        if(rep_q_as_items):
+            
+            search = re.search('\n\s*ITEM\s+[\(\|]?\s?1\s?[\)\|]?\s*[:\.]{0,1}(.)+?' + \
+                  '\n\s*ITEM\s+[\(\|]?\s?12\s?[\)\|]?\s*[:\.]{0,1}', text_raised, flags = re.DOTALL)
+            
+        else:
+            search = re.search('\n\s*[\(\|]?\s?1\s?[\)\|]?\s*[:\.]{0,1}(.)+?' + \
+                  '\n\s*[\(\|]?\s?12\s?[\)\|]?\s*[:\.]{0,1}', text_raised, flags = re.DOTALL)
+            
+    if(search):
+        
+        return(search.start() + lower_bound)
+    
+    else:
+        
+        return(-1)
             
 def find_regex1_end(text):
     
@@ -252,6 +539,45 @@ def find_regex1_end(text):
     else:
         # Use -1 to distinguish cases where regex was not found from other failures
         return(-1)
+
+
+def cover_page_start(text, form_type, cover_page_q1 = None, rep_q_as_items = None):
+    
+    if(rep_q_as_items is None):
+        
+        rep_q_as_items = is_rep_q_as_items(text)
+    
+    if(cover_page_q1 is None):
+        
+        cover_page_q1 = find_cover_page_q1_start(text, rep_q_as_items)
+        
+    if(cover_page_q1 == -1):
+        
+        # No question 1 found, so no cover pages, return -1
+        return(-1) 
+        
+    else:
+        
+        text_to_search = text[:cover_page_q1]
+    
+        text_reversed_and_raised = text_to_search[::-1].upper()
+
+        regex = '(PISUC|LODES)\s*\n'
+
+        search = re.search(regex, text_reversed_and_raised)
+
+        if(search):
+
+            num_back = search.end()
+
+        else:
+
+            num_back = 0
+
+        start = cover_page_q1 - num_back
+
+        return(start)
+
 
 
 def find_title_page_end(text):
@@ -282,9 +608,9 @@ def find_title_page_end(text):
 
         pot_results = []
 
-        for re in rep_start_re:
+        for regex in rep_start_re:
 
-            start = find_last_search_start(re, text_raised)
+            start = find_last_search_start(regex, text_raised)
 
             if(start):
                 pot_results.append(start)
@@ -292,65 +618,61 @@ def find_title_page_end(text):
         result = min(pot_results)
         
         return(result)
-
+    
+        
 
 def find_title_page_end(text):
     
     text_lowered = text.lower()
     
-    regex0 = '<page>'
+    regex1 = 'but\s+shall\s+be\s+subject\s+to\s+all\s+other\s+provisions\s+of\s+the\s+act\s*' + \
+             '(\(however,\s+see\s+the\s+notes\s*\))?(\.)?'
+
+    regex2 = 'for\s+any\s+subsequent\s+amendment\s+containing\s+information\s+which\s+' + \
+             'would\s+alter\s+(the\s+)?disclosures\s+provided\s+in\s+a\s+prior\s+cover\s+page(\.)?'
+
+    regex3 = 'see\s+((?:section|rule|[\xa7]{1,2})\s*)?(240\.\s*)?(\.\s*)?13d\s*[-\u2011]?\s*7' + \
+                 '(\s*\(\s*[a-z]\s*\)\s*)?\s+for\s+other\s+parties\s+to\s+whom\s+copies\s+' + \
+                 'are\s+to\s+be\s+sent(\.)'
     
-    regex1 = 'the\s+information\s+required\s+in\s+the\s+remainder\s+of\s+this\s+cover\s+page\s+' + \
-              'shall\s+not\s+be\s+deemed\s+to\s+be\s+\"filed\"\s+for\s+the\s+purpose\s+of\s+' + \
-              'section\s+18\s+of\s+the\s+securities\s+exchange\s+act\s+of\s+1934\s+' + \
-              'or\s+otherwise\s+subject\s+to\s+the\s+liabilities\s+of\s+that\s+section\s+of\s+the\s+act\s+' + \
-              'but\s+shall\s+be\s+subject\s+to\s+all\s+other\s+provisions\s+of\s+the\s+act\s+' + \
-              '\(however, see the notes\)\.'
+    regex4 = 'persons\s+who\s+respond\s+to\s+the\s+collection\s+of\s+information\s+contained\s+in\s+' + \
+             'this\s+form\s+are\s+not\s+required\s+to\s+respond\s+unless\s+the\s+form\s+displays\s+a\s+' + \
+             'currently\s+valid \s+omb\s+control\s+number(\.)?'
+
+    regex4 = '(\xa7\xa7)?(240\.)?13d-1\(e\),\s+' + \
+             '(\xa7\xa7)?(240\.)?13d-1\(f\)\s+or\s+(\xa7\xa7)?(240\.)?13d-1\(g\),\s+check\s+the\s+' + \
+             'following\s+box(\.)?\s+\[\s+\]\s*(\.)?'
     
-    regex2 = 'the\s+remainder\s+of\s+this\s+cover\s+page\s+shall\s+be\s+filled\s+out\s+for\s+a\s+reporting\s+' + \
-             'person\'s\s+initial\s+filing\s+on\s+this\s+form\s+with\s+respect\s+to\s+the\s+subject\s+class\s+' + \
-             'of\s+securities,\s+and\s+for\s+any\s+subsequent\s+amendment\s+containing\s+information\s+which\s+' + \
-             'would\s+alter\s+disclosures\s+provided\s+in\s+a\s+prior\s+cover\s+page\.'
     
-    regex3 = 'note:\s+six\s+copies\s+of\s+this\s+statement,\s+including\s+all\s+exhibits,\s+should\s+' + \
-             '\s+be\s+filed\s+with\s+the\s+commission\.\s+see\s+rule\s+13d-1\(a\)\s+for\s+other\s+' + \
-             'parties\s+to\s+whom\s+copies\s+are\s+to\s+be\s+sent\.'
-    
-    regex4 = 'if\s+the\s+filing\s+person\s+has\s+previously\s+filed\s+a\s+statement\s+on\s+schedule\s+13g\s+to' + \
-             'report\s+the\s+acquisition\s+which\s+is\s+the\s+subject\s+of\s+this\s+schedule\s+13d,\s+and\s+is\s+' + \
-             'filing\s+this\s+schedule\s+because\s+of\s+rule\s+13d-1\(e\),\s+13d-1\(f\)\s+or\s+13d-1\(g\),\s+' + \
-             'check\s+the\s+following\s+box\s+\[  \]\.'
-    
+
     regex5 = '(\()?\s*date\s+of\s+event\s+which\s+requires\s+filing\s+of\s+this\s+statement\s*(\))?'
-    
+
     regex6 = '(\()?\s*name,\s+address\s+and\s+telephone\s+number\s+of\s+person\s+authorized\s+to\s+receive\s+' + \
              'notices\s+and\s+communication(s)?\s*(\))?'
-    
+
     regex7 = '(\()?\s*(cusip\s+number|cusip\s+number\s+of\s+class\s+of\s+securities)\s*(\))?'
     
     
     
     
-    regex_list = [regex0, regex1, regex2, regex3, regex4, regex5, regex6, regex7]
+    regex_list = [regex1, regex2, regex3, regex4, regex5, regex6, regex7]
     
-    regex_search = None
+    regex_end_list = []
     
     for i in range(len(regex_list)):
         
-        regex_search = re.search(regex_list[i], text_lowered)
+        regex_end = find_last_search_end(regex_list[i], text_lowered)
         
-        if(regex_search):
+        if(regex_end):
             
-            break
+            regex_end_list.append(regex_search.end())
         
-    if(regex_search):
+    if(len(regex_end_list)):
         
-        return(regex_search.end())
+        return(max(regex_end_list))
     
     else:
-        return(None)
-
-
+        return(-1)
 
 def get_text_past_title_page(file_name):
         
@@ -369,30 +691,36 @@ def get_text_past_title_page(file_name):
     result = text_rem[title_page_end:]
     
     return(result)
-
-
-
-
-def has_item_labels_in_rep_pages(text):
-    
-    text_raised = text.upper()
-    
-    if(re.search('ITEM\s*[\(]?\s*1[24]\s*[\)]?\s*[\:\.]', text_raised)):
+   
+   
         
-        return(True)
+def find_cover_pages_last_question(text, rep_q_as_items = None,  lower_bound = None, upper_bound = None):
     
+    if(rep_q_as_items is None):
+        
+        rep_q_as_items = is_rep_q_as_items(text)
+    
+    if(lower_bound is not None and lower_bound > 0):
+        
+        if(upper_bound is not None and upper_bound > 0):
+            
+            text_raised = text.upper()[lower_bound:upper_bound]
+            
+        else:
+            
+            text_raised = text.upper()[lower_bound:]
+            
     else:
         
-        return(False)
-   
-   
-        
-
-def find_reporting_pages_last_question(text):
+        if(upper_bound is not None and upper_bound > 0):
+            
+            text_raised = text.upper()[:upper_bound]
+            
+        else:
+            
+            text_raised = text.upper() 
     
-    text_raised = text.upper()
-    
-    if(has_item_labels_in_rep_pages(text)):
+    if(rep_q_as_items):
         
         regex = 'ITEM\s*[\(]?\s*1[24]\s*[\)]?\s*[\:\.]?'
         
@@ -404,46 +732,232 @@ def find_reporting_pages_last_question(text):
 
     if(search is None):
         return(None)
-
+    
     end = 0
 
     while(search is not None):
-
+        
         end = end + search.end()
         search = re.search(regex, text_raised[end:])
 
+    if(lower_bound is not None and lower_bound > 0):
+        
+        end = end + lower_bound
+        
     return(end)       
     
     
-
-def find_reporting_pages_end(text):
+def find_cover_pages_end(text, rep_q_as_items = None, lower_bound = None, upper_bound = None):
     
-    end = find_reporting_pages_last_question(text)
+    
+    end = find_cover_pages_last_question(text, rep_q_as_items, lower_bound, upper_bound)
         
-    answer_regex = '\s+([0-9A-Z]{2}[;, ])*([0-9A-Z]{2})\s+\n?'
+    answer_regex = '\s+([A-Z0]{1}[;, \.]?[A-Z0]{1}[;, \.]?)*([A-Z0]{1}[;, \.]?[A-Z0]{1}[;, \.]?)\s*\n?'
     
-    last_answer = re.search(answer_regex, text[end:])
+    if(upper_bound is not None):
     
-    return(end + last_answer.end())       
+        last_answer = re.search(answer_regex, text[end:upper_bound])
+        
+    else:
+        
+        last_answer = re.search(answer_regex, text[end:])
+    
+    if(last_answer is not None):
+    
+        return(end + last_answer.end())
+    
+    else:
+        
+        return(-1)
+
+ 
+def num_cusip_sedol_before_index(text, index = None):
+
+    try:
+        if(index):
+            text_lowered = text.lower()[:index]
+        else:
+            text_lowered = text.lower()
+        
+        num_cusip_sedol = len(re.findall('(cusip|sedol)', text_lowered))
+        
+        return(num_cusip_sedol)
+
+    except Exception as e:
+        print(e)
+        return(None)
+
+    
+def find_explanatory_statement_start(text, lower_bound = None, upper_bound = None):
+    
+    # This function is designed to get the start of the explanatory/amendment statement 
+    # that is sometimes found between the end of the cover pages and the start of the item section 
+    
+    
+
+    regex_list = ['\n\s*explanatory\s+note', '\n\s*amendment\s+(number|no)(\.)?\s*[0-9]+\s*\n',\
+                  '\n\s*schedule\s+13[dg]\s+amendment\s+(number|no)(\.)?\s*[0-9]+\s*\n',\
+                  '\n\s*this\s+amendment\s+(number|no)(\.)?\s*[0-9]+\s+', \
+                    '\n\s*pursuant\s+to\s+rule\s+13d-', '\n\s*this\s+amended\s+schedule\s+13[dg]', \
+'\n\s*the\s+undersigned(\s+reporting\s+person(s)?)?\s+hereby\s+amend\s+(the|their)\s+schedule\s+13[dg]',\
+                  '\n\s*the\s+schedule\s+13[dg]\s+was\s+initially\s+filed',\
+                 '\n(.)+hereby\s+amends\s+the\s+schedule\s+13[dg]',\
+                  '\n\s*the\s+filing\s+of\s+this\s+schedule\s+13[dg]',\
+                 '\n\s*the\s+filing\s+of\s+this\s+statement\s+on\s+schedule\s+13[dg]',\
+                 '\n\s*the\s+reporting\s+person(s)?\s+listed\s+']
+
+    if(lower_bound):
+
+        if(upper_bound):
+
+            text_lowered = text.lower()[lower_bound:upper_bound]
+
+        else:
+
+            text_lowered = text.lower()[lower_bound:]
+
+    else:
+
+        if(upper_bound):
+
+            text_lowered = text.lower()[:upper_bound]
+
+        else:
+
+            text_lowered = text.lower()
+
+    search_starts = []
+
+    for pattern in regex_list:
+
+        search = re.search(pattern, text_lowered)
+
+        if(search):
+
+            search_starts.append(search.start())
+
+    if(len(search_starts)):
+
+        if(lower_bound):
+
+            return(min(search_starts) + lower_bound)
+
+        else:
+
+            return(min(search_starts))
+
+    else:
+
+        return(-1)
+        
+    
   
 
-
+def get_key_indices(file_name, document, form_type, directory):
+    
+    key_info = {}
+    
+    text = get_main_doc_text(file_name, document, directory)
+    
+    key_info['file_name'] = [file_name]
+    key_info['document'] = [document]
+    key_info['form_type'] = [form_type]
+    key_info['title_page_end_lower_bound'] = [find_title_page_end(text)]
+    key_info['cover_page_q1_start'] = [find_orthodox_cover_page_q1_start(text)]
+    key_info['is_rep_q_as_items'] = [is_rep_q_as_items(text, key_info['cover_page_q1_start'][0])]
+    if(key_info['is_rep_q_as_items'][0]):
+        
+        key_info['cover_page_q1_start'] = [cover_page_start_is_rep_as_q(text, form_type, \
+                                                lower_bound = key_info['title_page_end_lower_bound'][0])]
+    key_info['num_cusip_sedol_b_q1'] = [num_cusip_sedol_before_index(text, \
+                                                                    key_info['cover_page_q1_start'][0])]
+    key_info['cover_page_start'] = [cover_page_start(text, form_type, \
+            cover_page_q1 = key_info['cover_page_q1_start'][0], \
+                                                     rep_q_as_items = key_info['is_rep_q_as_items'][0])]
+    
+    
+    key_info['item_section_start'] = [get_item_section_start(text, form_type)]
+    key_info['cover_page_last_q_end'] = [find_cover_pages_last_question(text, \
+                        key_info['is_rep_q_as_items'][0], key_info['cover_page_q1_start'][0], \
+                                                                        key_info['item_section_start'][0])]
+    key_info['cover_page_end'] = [find_cover_pages_end(text, key_info['is_rep_q_as_items'][0],\
+                                key_info['cover_page_q1_start'][0], key_info['item_section_start'][0])]
+    
+    key_info['num_cusip_b_items'] = [num_cusip_sedol_before_index(text, \
+                                                                  index = key_info['item_section_start'][0])]
+    key_info['signature_start'] = [get_signatures_sec_start(text)]
+    
+    if(key_info['cover_page_start'][0] != -1 and key_info['item_section_start'][0] != -1\
+      and key_info['item_section_start'][0] > key_info['cover_page_start'][0]):
+        
+        amend_l_bound = key_info['cover_page_start'][0]
+        
+    else:
+        
+        amend_l_bound = None
+    
+    key_info['explanatory_statement_start'] = find_explanatory_statement_start(text, \
+                            lower_bound = amend_l_bound, upper_bound = key_info['item_section_start'][0])
+    
+    
+    key_info_df = pd.DataFrame(key_info)
+    
+    return(key_info_df)
+    
+    
+    
 
   
-def get_item_section_start(text):
+def get_item_section_start(text, form_type):    
     
+    
+    if(re.search('SC\s+13D', form_type)):
+        
+        re_list = ['\n\s*[#\.\;\:]?\s*1[#\.\;\:]?\s*security\s+and\s+issuer',
+                   '\n\s*[#\.\;\:]?\s*2[#\.\;\:]?\s*identity\s+and\s+background',
+                   '\n\s*[#\.\;\:]?\s*3[#\.\;\:]?\s*source\s+and\s+amount\s+of\s+funds',
+                   '\n\s*[#\.\;\:]?\s*4[#\.\;\:]?\s*purpose\s+of\s+transaction',
+                   '\n\s*[#\.\;\:]?\s*5[#\.\;\:]?\s*interest\s+in\s+securities\s+of\s+the\s+issuer',
+                   '\n\s*[#\.\;\:]?\s*6[#\.\;\:]?\s*contracts,\s+arrangements,\s+understandings',
+                   '\n\s*[#\.\;\:]?\s*7[#\.\;\:]?\s*material\s+to\s+be\s+filed\s+as\s+exhibits'
+                  ]
+                       
+        
+    elif(re.search('SC\s+13G', form_type)):
+        
+        re_list = ['\n\s*[#\.\;\:]?\s*1[#\.\;\:]?[\(]?\s*a[\)]?[#\.\;\:]?\s*name\s+of\s+issuer',
+                   '\n\s*[#\.\;\:]?\s*1[#\.\;\:]?[\(]?\s*b[\)]?[#\.\;\:]?\s*address\s+of\s+issuer',
+                   '\n\s*[#\.\;\:]?\s*2[#\.\;\:]?[\(]?\s*a[\)]?[#\.\;\:]?\s*name[s]?\s+of\s+person[s]?\s+filing',
+                   '\n\s*[#\.\;\:]?\s*2[#\.\;\:]?[\(]?\s*b[\)]?[#\.\;\:]?\s*address\s+of\s+principle',
+                   '\n\s*[#\.\;\:]?\s*2[#\.\;\:]?[\(]?\s*c[\)]?[#\.\;\:]?\s*citizenship',
+                   '\n\s*[#\.\;\:]?\s*2[#\.\;\:]?[\(]?\s*d[\)]?[#\.\;\:]?\s*title\s+of\s+class',
+                   '\n\s*[#\.\;\:]?\s*2[#\.\;\:]?[\(]?\s*e[\)]?[#\.\;\:]?\s*cusip\s+number',
+                   '\n\s*[#\.\;\:]?\s*3[#\.\;\:]?\s*if\s+this\s+statement\s+is\s+filed\s+pursuant',
+                   '\n\s*[#\.\;\:]?\s*4[#\.\;\:]?\s*ownership',
+                   '\n\s*[#\.\;\:]?\s*5[#\.\;\:]?\s*ownership\s+of\s+five',
+                   '\n\s*[#\.\;\:]?\s*6[#\.\;\:]?\s*ownership\s+of\s+more',
+                   '\n\s*[#\.\;\:]?\s*7[#\.\;\:]?\s*identification\s+and\s+classification',
+                   '\n\s*[#\.\;\:]?\s*8[#\.\;\:]?\s*identification\s+and\s+classification',
+                   '\n\s*[#\.\;\:]?\s*9[#\.\;\:]?\s*notice\s+of\s+dissolution',
+                   '\n\s*[#\.\;\:]?\s*10[#\.\;\:]?\s*certification'
+                  ]
+        
+    else:
+        
+        # Not a Schedule 13D(/A) or 13G(/A)
+        return(None)
    
-    reporting_pages_end = find_reporting_pages_last_question(text)
+    cover_pages_end = find_cover_pages_last_question(text)
     
-    if(reporting_pages_end):
+    if(cover_pages_end):
 
-        text_lowered = text[reporting_pages_end:].lower()
+        text_lowered = text[cover_pages_end:].lower()
 
-        search = re.search('\s*item\s*(?:[0-9]|10)(\.)?', text_lowered)
+        search = re.search('\n\s*item\s*[#\.\;\:]?\s*(?:[0-9])[#\.\;\:]?', text_lowered)
         
         if(search):
 
-            return(reporting_pages_end + search.start())  
+            return(cover_pages_end + search.start())  
         
         else:
             return(None) # ie. assume no Item section (this probably happens with 13D/A and 13G/A)
@@ -452,14 +966,28 @@ def get_item_section_start(text):
         
         text_lowered = text.lower() # Assume NO REPORTING PAGES (this happens, especially with 13D/A and 13G/A)
 
-        search = re.search('\s*item\s*(?:[0-9]|10)(\.)?', text_lowered)
+        search = re.search('\n\s*item\s*[#\.\;\:]?\s*[0-9][#\.\;\:]?', text_lowered)
 
         if(search):
 
             return(search.start())  
         
-        else:
-            return(None) # ie. assume no Item section (this probably happens with 13D/A and 13G/A)    
+        else: 
+             
+            result = None # ie. assume no Item section (this probably happens with 13D/A and 13G/A) if no matches in
+                          # re_list
+                
+            for i in range(len(re_list)):
+                
+                search = re.search(re_list[i], text_lowered)
+                
+                if(search):
+                    
+                    result = search.start()
+                    break
+            
+            
+            return(result) 
         
         
         
@@ -469,24 +997,16 @@ def get_signatures_sec_start(text):
     
     text_lowered = text.lower()
     
-    
-    regex0 = '\n\s*item\s+10(\.)?\s+certification'
+    regex0 = '\n\s*(signature|signatures)\s*(\.)?\n'
     
     regex1 = 'the\s+following\s+certification\s+shall\s+be\s+included\s+if\s+the\s+statement\s+is\s+filed\s+' + \
              'pursuant to rule 13d-1\(b\)'
     
-    regex2 = 'by\s+signing\s+below\s+i\s+certify\s+that,\s+to\s+the\s+best\s+of\s+my\s+knowledge\s+' + \
-             'and\s+belief,\s+the\s+securities\s+referred\s+to\s+above\s+were\s+acquired\s+in\s+the\s+' + \
-             'ordinary\s+course\s+of\s+business\s+and\s+were\s+not\s+acquired\s+for\s+the\s+purpose\s+of\s+' + \
-             'and\s+do\s+not\s+have\s+the\s+effect\s+of\s+changing\s+or\s+influencing\s+the\s+control\s+of\s+' + \
-             'the\s+issuer\s+of\s+such\s+securities\s+and\s+weres+nots+acquireds+in\s+connection\s+with\s+or\s+' + \
-             'as\s+a\s+participant\s+in\s+any\s+transaction\s+having\s+such\s+purposes\s+or\s+effect\.'
+    regex2 = 'by\s+signing\s+below\s+i\s+certify\s+that,\s+to\s+the\s+best\s+of\s+my\s+knowledge'
+  
+    regex3 = 'after\s+reasonable\s+inquiry\s+'
     
-    regex3 = '\n\s*(signature|signatures)\s*(\.)?\n'
-
-    regex4 = 'after\s+reasonable\s+inquiry\s+'
-    
-    regex_list = [regex0, regex1, regex2, regex3, regex4]
+    regex_list = [regex0, regex1, regex2, regex3]
     
     regex_search = None
     
@@ -695,37 +1215,37 @@ def get_filing_report_q_and_a(text, form_type):
     text_upper = text.upper()
     
     if(re.search('^SC 13D', form_type)):
-        question_regex_dict = {1: '1\s*[:\.]{0,1}\s*NAME[S]?\s+OF\s+REPORTING\s+PERSON[S]?',
-                       2: '2\s*[:\.]{0,1}\s*CHECK\s+THE\s+APPROPRIATE\s+BOX\s+IF\s+A\s+MEMBER',
-                       3: '3\s*[:\.]{0,1}\s*SEC\s+USE\s+ONLY',
-                       4: '4\s*[:\.]{0,1}\s*SOURCE\s+OF\s+FUNDS[\*]?',
-                       5: '5\s*[:\.]{0,1}\s*CHECK(\s+BOX)?\s+IF\s+DISCLOSURE\s+OF\s+LEGAL\s+PROCEEDINGS',
-                       6: '6\s*[:\.]{0,1}\s*CITIZENSHIP\s+OR\s+PLACE\s+OF\s+ORGANIZATION', 
-                       7: '7\s*[:\.]{0,1}\s*SOLE\s+VOTING\s+POWER',
-                       8: '8\s*[:\.]{0,1}\s*SHARED\s+VOTING\s+POWER',
-                       9: '9\s*[:\.]{0,1}\s*SOLE\s+DISPOSITIVE\s+POWER',
-                       10: '10\s*[:\.]{0,1}\s*SHARED\s+DISPOSITIVE\s+POWER',
-                       11: '11\s*[:\.]{0,1}\s*AGGREGATE\s+AMOUNT\s+BENEFICIALLY\s+OWNED',
-                       12: '12\s*[:\.]{0,1}\s*CHECK(\s+BOX)?\s+IF\s+THE\s+AGGREGATE\s+AMOUNT',
-                       13: '13\s*[:\.]{0,1}\s*PERCENT\s+OF\s+CLASS\s+REPRESENTED',
-                       14: '14\s*[:\.]{0,1}\s*TYPE[S]?\s+OF\s+REPORTING\s+PERSON[S]?'}
+        question_regex_dict = {1: '[\(]?1[\)]?\s*[:\.]{0,1}\s*NAME[S]?\s+OF\s+REPORTING\s+PERSON[S]?',
+                       2: '[\(]?2[\)]?\s*[:\.]{0,1}\s*CHECK\s+THE\s+APPROPRIATE\s+BOX\s+IF\s+A\s+MEMBER',
+                       3: '[\(]?3[\)]?\s*[:\.]{0,1}\s*SEC\s+USE\s+ONLY',
+                       4: '[\(]?4[\)]?\s*[:\.]{0,1}\s*SOURCE\s+OF\s+FUNDS[\*]?',
+                       5: '[\(]?5[\)]?\s*[:\.]{0,1}\s*CHECK(\s+BOX)?\s+IF\s+DISCLOSURE\s+OF\s+LEGAL\s+PROCEEDINGS',
+                       6: '[\(]?6[\)]?\s*[:\.]{0,1}\s*CITIZENSHIP\s+OR\s+PLACE\s+OF\s+ORGANIZATION', 
+                       7: '[\(]?7[\)]?\s*[:\.]{0,1}\s*SOLE\s+VOTING\s+POWER',
+                       8: '[\(]?8[\)]?\s*[:\.]{0,1}\s*SHARED\s+VOTING\s+POWER',
+                       9: '[\(]?9[\)]?\s*[:\.]{0,1}\s*SOLE\s+DISPOSITIVE\s+POWER',
+                       10: '[\(]?10[\)]?\s*[:\.]{0,1}\s*SHARED\s+DISPOSITIVE\s+POWER',
+                       11: '[\(]?11[\)]?\s*[:\.]{0,1}\s*AGGREGATE\s+AMOUNT\s+BENEFICIALLY\s+OWNED',
+                       12: '[\(]?12[\)]?\s*[:\.]{0,1}\s*CHECK(\s+BOX)?\s+IF\s+THE\s+AGGREGATE\s+AMOUNT',
+                       13: '[\(]?13[\)]?\s*[:\.]{0,1}\s*PERCENT\s+OF\s+CLASS\s+REPRESENTED',
+                       14: '[\(]?14[\)]?\s*[:\.]{0,1}\s*TYPE[S]?\s+OF\s+REPORTING\s+PERSON[S]?'}
        
         num_sec = 15
        
     elif(re.search('^SC 13G', form_type)):
         
-        question_regex_dict = {1: '1\s*[:\.]{0,1}\s*NAME[S]?\s+OF\s+REPORTING\s+PERSON[S]?',
-                       2: '2\s*[:\.]{0,1}\s*CHECK\s+THE\s+APPROPRIATE\s+BOX\s+IF\s+A\s+MEMBER',
-                       3: '3\s*[:\.]{0,1}\s*SEC\s+USE\s+ONLY',
-                       4: '4\s*[:\.]{0,1}\s*CITIZENSHIP\s+OR\s+PLACE\s+OF\s+ORGANIZATION', 
-                       5: '5\s*[:\.]{0,1}\s*SOLE\s+VOTING\s+POWER',
-                       6: '6\s*[:\.]{0,1}\s*SHARED\s+VOTING\s+POWER',
-                       7: '7\s*[:\.]{0,1}\s*SOLE\s+DISPOSITIVE\s+POWER',
-                       8: '8\s*[:\.]{0,1}\s*SHARED\s+DISPOSITIVE\s+POWER',
-                       9: '9\s*[:\.]{0,1}\s*AGGREGATE\s+AMOUNT\s+BENEFICIALLY\s+OWNED',
-                       10: '10\s*[:\.]{0,1}\s*CHECK(\s+BOX)?\s+IF\s+THE\s+AGGREGATE\s+AMOUNT',
-                       11: '11\s*[:\.]{0,1}\s*PERCENT\s+OF\s+CLASS\s+REPRESENTED',
-                       12: '12\s*[:\.]{0,1}\s*TYPE[S]?\s+OF\s+REPORTING\s+PERSON[S]?'}
+        question_regex_dict = {1: '[\(]?1[\)]?\s*[:\.]{0,1}\s*NAME[S]?\s+OF\s+REPORTING\s+PERSON[S]?',
+                       2: '[\(]?2[\)]?\s*[:\.]{0,1}\s*CHECK\s+THE\s+APPROPRIATE\s+BOX\s+IF\s+A\s+MEMBER',
+                       3: '[\(]?3[\)]?\s*[:\.]{0,1}\s*SEC\s+USE\s+ONLY',
+                       4: '[\(]?4[\)]?\s*[:\.]{0,1}\s*CITIZENSHIP\s+OR\s+PLACE\s+OF\s+ORGANIZATION', 
+                       5: '[\(]?5[\)]?\s*[:\.]{0,1}\s*SOLE\s+VOTING\s+POWER',
+                       6: '[\(]?6[\)]?\s*[:\.]{0,1}\s*SHARED\s+VOTING\s+POWER',
+                       7: '[\(]?7[\)]?\s*[:\.]{0,1}\s*SOLE\s+DISPOSITIVE\s+POWER',
+                       8: '[\(]?8[\)]?\s*[:\.]{0,1}\s*SHARED\s+DISPOSITIVE\s+POWER',
+                       9: '[\(]?9[\)]?\s*[:\.]{0,1}\s*AGGREGATE\s+AMOUNT\s+BENEFICIALLY\s+OWNED',
+                       10: '[\(]?10[\)]?\s*[:\.]{0,1}\s*CHECK(\s+BOX)?\s+IF\s+THE\s+AGGREGATE\s+AMOUNT',
+                       11: '[\(]?11[\)]?\s*[:\.]{0,1}\s*PERCENT\s+OF\s+CLASS\s+REPRESENTED',
+                       12: '[\(]?12[\)]?\s*[:\.]{0,1}\s*TYPE[S]?\s+OF\s+REPORTING\s+PERSON[S]?'}
         
         num_sec = 13
         
@@ -892,21 +1412,23 @@ def eliminate_beneficial_own_statement(text):
     result = strip_form_statement(text, 'NUMBER OF SHARES BENEFICIALLY OWNED BY EACH REPORTING PERSON WITH')
     
     return(result)        
-
+    
     
 def get_answer_text(q_text, form_type, question_number):
     
-    # This function is designed to be used on all questions except question 2, in which there are boxes (a) and (b)
+    # This function is designed to be used on all questions except question 2, 
+    # in which there are boxes (a) and (b)
    
     
     # First, get rid of beneficial ownership statement
-    result = eliminate_beneficial_own_statement(q_text)
       
     if(re.search("13D", form_type)):
         
+        ben_own_statement_keys = [6, 7, 8, 9, 10, 11]
+        
         q_regex_dict = {1: '(?:NAMES|NAME) OF REPORTING (?:PERSONS|PERSON)[*]? S.S. ' + \
                          'OR I.R.S. IDENTIFICATION (?:NOS.|NO.) OF ABOVE (?:PERSONS|PERSON) \(ENTITIES ONLY\)',
-                        4: 'SOURCE OF FUNDS[*]?',
+                        4: 'SOURCE OF FUNDS[*]? \(SEE INSTRUCTIONS\)',
                         5: 'CHECK BOX IF DISCLOSURE OF LEGAL PROCEEDINGS IS REQUIRED PURSUANT' + \
                            ' TO ITEMS 2\(D\) OR 2\(E\)',
                         6: 'CITIZENSHIP OR PLACE OF ORGANIZATION',
@@ -915,12 +1437,14 @@ def get_answer_text(q_text, form_type, question_number):
                         9: 'SOLE DISPOSITIVE POWER',
                         10: 'SHARED DISPOSITIVE POWER', 
                         11: 'AGGREGATE AMOUNT BENEFICIALLY OWNED BY EACH REPORTING PERSON',
-                        12: 'CHECK BOX IF THE AGGREGATE AMOUNT IN ROW (?:\(11\)|11) EXCLUDES CERTAIN SHARES[*]?',
-                        13: 'PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW (?:\(11\)|11)',
-                        14: '(?:TYPES|TYPE) OF REPORTING (?:PERSONS|PERSON)[\*]?'
+                        12: 'CHECK BOX IF THE AGGREGATE AMOUNT IN ROW \(11\) EXCLUDES CERTAIN SHARES[*]?',
+                        13: 'PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW \(11\)',
+                        14: 'TYPE[S]? OF REPORTING PERSON[S]? \(SEE INSTRUCTIONS\)'
                        }
         
     elif(re.search("13G", form_type)):
+        
+        ben_own_statement_keys = [4, 5, 6, 7, 8, 9]
         
         q_regex_dict = {1: '(?:NAMES|NAME) OF REPORTING (?:PERSONS|PERSON)[*]? S.S. ' + \
                          'OR I.R.S. IDENTIFICATION (?:NOS.|NO.) OF ABOVE (?:PERSONS|PERSON) \(ENTITIES ONLY\)',
@@ -930,12 +1454,22 @@ def get_answer_text(q_text, form_type, question_number):
                         7: 'SOLE DISPOSITIVE POWER',
                         8: 'SHARED DISPOSITIVE POWER',
                         9: 'AGGREGATE AMOUNT BENEFICIALLY OWNED BY EACH REPORTING PERSON',
-                        10: 'CHECK BOX IF THE AGGREGATE AMOUNT IN ROW (?:\(9\)|9) EXCLUDES CERTAIN SHARES[*]?',
-                        11: 'PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW (?:\(9\)|9)',
-                        12: '(?:TYPES|TYPE) OF REPORTING (?:PERSONS|PERSON)[*]?'
+                        10: 'CHECK BOX IF THE AGGREGATE AMOUNT IN ROW \(9\) EXCLUDES CERTAIN SHARES[*]?',
+                        11: 'PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW \(9\)',
+                        12: 'TYPE[S]? OF REPORTING PERSON[S]? \(SEE INSTRUCTIONS\)'
                        }
     
-    result = re.sub('^' + str(question_number) + '\s*[:\.]?', '', result)
+    # First, get rid of beneficial ownership statement
+    
+    if(question_number in ben_own_statement_keys):
+
+        result = eliminate_beneficial_own_statement(q_text)
+
+    else:
+
+        result = q_text
+    
+    result = re.sub('^[\(]?' + str(question_number) + '[\)]?\s*[:\.]?', '', result)
     
     result = re.sub('(^[\:\;\-\–\.\s]+|[\s\-]+$)', '', strip_form_statement(result, q_regex_dict[question_number]))
     
@@ -943,12 +1477,11 @@ def get_answer_text(q_text, form_type, question_number):
     
     
     
-    
 def q2_boxes_a_and_b(q2_text):
     
-    a_start = re.search('\([aA]\)', q2_text).end()
-    a_end = re.search('\([bB]\)', q2_text).start()
-    b_start = re.search('\([bB]\)', q2_text).end()
+    a_start = re.search('\([aAcCeE][\.]?\)', q2_text).end()
+    a_end = re.search('\([bBdDfF][\.]?\)', q2_text).start()
+    b_start = re.search('\([bBdDfF][\.]?\)', q2_text).end()
     
     q2a_ticked = (re.search('[xX]', q2_text[a_start:a_end]) is not None)
     q2b_ticked = (re.search('[xX]', q2_text[b_start:]) is not None)
@@ -1120,9 +1653,9 @@ def get_reporting_page_df(reporting_page, form_type):
     return(df)
 
 
-def get_all_reporting_pages_df(reporting_pages_text, file_name, form_type):
+def get_all_reporting_pages_df(reporting_pages_text, file_name, form_type, is_rep_q_as_items):
     
-    pages = get_reporting_pages(reporting_pages_text)
+    pages = get_reporting_pages(reporting_pages_text, form_type, is_rep_q_as_items)
     
     df_list = []
     
@@ -1133,14 +1666,21 @@ def get_all_reporting_pages_df(reporting_pages_text, file_name, form_type):
         df['seq'] = i + 1
         
         df_list.append(df)
-        
-    full_df = pd.concat(df_list, ignore_index = True)
-    order = ['file_name', 'form_type', 'seq', 'cusips', 'sedols', 'rep_person_name', 'box_2a', 'box_2b', \
-             'source_of_funds', 'SC_13D_box_5', 'citizenship_place_of_organization', 'num_shares_sole_vp', \
-             'num_shares_shared_vp', 'num_shares_sole_dp', 'num_shares_shared_dp', 'agg_amount_owned', \
-             'certain_shares_exc_from_agg', 'agg_amount_percentage_share', 'reporting_person_type']
     
-    full_df = full_df[order]
+    order = ['file_name', 'form_type', 'seq', 'cusips', 'sedols', 'rep_person_name', 'box_2a', 'box_2b', \
+                 'source_of_funds', 'SC_13D_box_5', 'citizenship_place_of_organization', 'num_shares_sole_vp', \
+                 'num_shares_shared_vp', 'num_shares_sole_dp', 'num_shares_shared_dp', 'agg_amount_owned', \
+                 'certain_shares_exc_from_agg', 'agg_amount_percentage_share', 'reporting_person_type']
+    
+    if(len(df_list)):
+    
+        full_df = pd.concat(df_list, ignore_index = True)
+        full_df = full_df[order]
+        
+    else:
+        
+        full_df = pd.DataFrame(columns = order)
+    
     return(full_df)
 
 
