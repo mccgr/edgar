@@ -176,20 +176,26 @@ def get_main_doc_text(file_name, document, directory):
     
     try:
         soup = BeautifulSoup(full_text, 'html5lib')
-        main_doc_text = soup.find(["document", "DOCUMENT"]).get_text()
+        main_doc_text = soup.find(["document", "DOCUMENT"]).get_text('\n')
+        main_doc_text = clean_text(main_doc_text) # Clean one more time, 
+                                                  # in case unwanted characters come out of soup
         
     except:
         
         try:
             soup = BeautifulSoup(full_text, 'lxml')
-            main_doc_text = soup.find(["document", "DOCUMENT"]).get_text()
+            main_doc_text = soup.find(["document", "DOCUMENT"]).get_text('\n')
+            main_doc_text = clean_text(main_doc_text) # Clean one more time, 
+                                                  # in case unwanted characters come out of soup
             
         except:
             
             soup = BeautifulSoup(full_text, 'html.parser')
-            main_doc_text = soup.find(["document", "DOCUMENT"]).get_text()
-    
-    return(main_doc_text)            
+            main_doc_text = soup.find(["document", "DOCUMENT"]).get_text('\n')
+            main_doc_text = clean_text(main_doc_text) # Clean one more time, 
+                                                  # in case unwanted characters come out of soup
+                
+    return(main_doc_text)
     
    
    
@@ -572,7 +578,7 @@ def cover_page_start(text, form_type, lower_bound = None, cover_page_q1 = None, 
     
         text_reversed_and_raised = text_to_search[::-1].upper()
 
-        regex = '(PISUC|LODES)\s*\n'
+        regex = '(PISUC|LODES)(.)*\n'
 
         search = re.search(regex, text_reversed_and_raised)
 
