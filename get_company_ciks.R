@@ -5,22 +5,7 @@ library(XML)
 source('cusip_cik/get_13D_filing_details.R')
 source('forms345/forms_345_xml_functions.R')
 
-filing_per_cik_sql <- "SELECT DISTINCT ON (cik) * FROM edgar.filings ORDER BY cik, file_name"
 
-pg <- dbConnect(RPostgreSQL::PostgreSQL())
-
-filing_per_cik_df <- tbl(pg, sql(filing_per_cik_sql)) %>% collect()
-
-
-file_name <- filing_per_cik_df$file_name[1]
-sgml <- getSGMLlocation(file_name)
-
-
-
-
-
-xml_parse <- xmlParse(getURL(sgml))
-xml_root <- xmlRoot(xml_parse)
 
 is_matched <- function(tag_num, tags) {
 
@@ -102,6 +87,7 @@ get_xml_root <- function(file_name) {
 
 is_company <- function(file_name, cik) {
 
+    try({
     root <- get_xml_root(file_name)
 
     nodes <- xml_find_all(root, '//cik')
@@ -118,12 +104,59 @@ is_company <- function(file_name, cik) {
 
     return(result)
 
+    }, {return(NA)})
+
 }
 
 
 
+filing_per_cik_sql <- "SELECT DISTINCT ON (cik) * FROM edgar.filings ORDER BY cik, file_name"
 
-xml_children(xml_parent(xml_find_all(root, '//cik')))
+pg <- dbConnect(RPostgreSQL::PostgreSQL())
+
+filing_per_cik_df <- tbl(pg, sql(filing_per_cik_sql)) %>% collect()
+
+
+num_ciks <- nrow(filing_per_cik_df)
+batch_size <- 200
+num_cores <- 12
+num_batches <- floor(num_ciks/batch_size) + 1
+total_time <- 0
+num_success <- 0
+
+new_table <- !dbExistsTable(pg, c("edgar", "company_ciks"))
+
+
+for (i in 1:num_batches) {
+
+    start <- (i-1) * batch_size + 1
+
+    if(i == num_batches) {
+
+        end <- num_ciks
+
+    } else {
+
+        end <- i * batch_size
+
+    }
+
+    batch <- filing_per_cik_df[start:end, ]
+
+    total_time <- total_time + system.time(batch$is_company <- unlist(mclapply(1:nrow(batch), function(i) {is_company(batch$file_name[i], batch$cik[i])}, mc.cores = num_cores)))
+
+    num_success <- num_success + sum(!is.na(batch$is_company))
+
+    rs <- dbWriteTable(pg, c("edgar", "company_ciks"), batch, append = !new_table, row.names = FALSE)
+
+    print(paste0(num_success, ' processed out of ', end, ' ciks'))
+    print(paste0('Time taken: ', total_time))
+
+    new_table <- FALSE
+
+}
+
+
 
 dbDisconnect(pg)
 
