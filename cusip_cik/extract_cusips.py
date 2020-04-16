@@ -110,21 +110,41 @@ def exceeded_sec_request_limit(soup):
         return(False)    
     
     
-def get_subject_cik_company_name(file_name, soup = None):
+def get_soup(file_name):
     
-    if(soup is None):
-        
-        url = get_filing_txt_url(file_name)
-        page = requests.get(url)
-        # Following two lines omit source code for added files, pdfs, gifs, etc...
-        page_end = re.search(b'</DOCUMENT>', page.content).end() 
-        content = page.content[:page_end] + b'\n</SEC-DOCUMENT>'
-        soup = BeautifulSoup(content, 'html.parser')
+    url = get_filing_txt_url(file_name)
+    page = requests.get(url)
+    # Following two lines omit source code for added files, pdfs, gifs, etc...
+    page_end = re.search(b'</DOCUMENT>', page.content).end() 
+    content = page.content[:page_end] + b'\n</SEC-DOCUMENT>'
+    soup = BeautifulSoup(content, 'html.parser')
         
         
     if(exceeded_sec_request_limit(soup)):
         
         raise ConnectionRefusedError("Hit SEC's too many requests page. Abort")
+        
+    else:
+        
+        return(soup)
+    
+    
+def get_index_url_soup(file_name):
+    
+    url = get_index_url(file_name)
+    page = requests.get(url)
+    soup = BeautifulSoup(page.content, 'html.parser')
+    
+    if(exceeded_sec_request_limit(soup)):
+        
+        raise ConnectionRefusedError("Hit SEC's too many requests page. Abort")
+        
+    else:
+        
+        return(soup)
+ 
+    
+def get_subject_cik_company_name_from_document(soup):
         
     try:
         header_tag = soup.find(['IMS-HEADER', 'SEC-HEADER', 'sec-header'])
@@ -146,47 +166,47 @@ def get_subject_cik_company_name(file_name, soup = None):
         company_name = company_name.strip(' ')
         
         return(cik, company_name)
-        
+
+    except ConnectionRefusedError:
+
+        print("get_subject_cik_company_name failed on second effort due to reaching too many requests page")
+        raise
+
+    except:
+
+        cik = None
+        company_name = None
+        return(cik, company_name)
+    
+
+    
+def get_subject_cik_company_name_from_index_page(file_name):
+    
+    try:
+
+        soup = get_index_url_soup(file_name)
+        subject_regex = "(.*)\(Subject\)|\(SUBJECT\)|\(subject\)(.*)"
+        company_nodes = soup.findAll(attrs = {'class': 'companyName'})
+
+        for node in company_nodes:
+
+            if(re.search(subject_regex, node.getText())):
+
+                subject_node = node
+                break
+
+        lines = subject_node.text.split('\n')
+        cik = int(re.sub('[^\d]', '', re.sub('\(see all company filings\)|CIK:', '', lines[1]).strip(' ')))
+        company_name = re.sub('\(Subject\)', '', lines[0]).strip(' ')
+
+        return(cik, company_name)
+    
     except:
         
-        try:
-            
-            url = get_index_url(file_name)
-            page = requests.get(url)
-            soup = BeautifulSoup(page.content, 'html.parser')
-            
-            if(exceeded_sec_request_limit(soup)):
+        cik = None
+        company_name = None
+        return(cik, company_name)
         
-                raise ConnectionRefusedError("Hit SEC's too many requests page. Abort")
-
-            subject_regex = "(.*)\(Subject\)|\(SUBJECT\)|\(subject\)(.*)"
-            company_nodes = soup.findAll(attrs = {'class': 'companyName'})
-
-            for node in company_nodes:
-
-                if(re.search(subject_regex, node.getText())):
-
-                    subject_node = node
-                    break
-
-            lines = subject_node.text.split('\n')
-            cik = int(re.sub('[^\d]', '', re.sub('\(see all company filings\)|CIK:', '', lines[1]).strip(' ')))
-            company_name = re.sub('\(Subject\)', '', lines[0]).strip(' ')
-
-            return(cik, company_name)
-        
-        except ConnectionRefusedError:
-            
-            print("get_subject_cik_company_name failed on second effort due to reaching too many requests page")
-            raise
-        
-        except:
-            
-            cik = None
-            company_name = None
-            return(cik, company_name)
-        
-
 
 def calculate_cusip_check_digit(cusip):
     
@@ -261,86 +281,86 @@ def calculate_cusip_check_digit(cusip):
         
         return(None)
 
+    
 
+def extract_cusips(text):
+    
+    cusip_hdr = r'CUSIP\s+(?:NO\.|#|NUMBER)[:]?'
+    cusip_fmt = '((?:[0-9A-Z]{1}[ -]{0,3}){6,12})'
+
+    regex_dict = {'A': cusip_fmt + r'[\s\r\t\n]*[_\.-]?\s*(?:[_\.-]{9,})?[\s\r\t\n]*' +  \
+    r'\(CUSIP\s+(?:NUMBER|NUMBER\s+OF\s+CLASS\s+OF\s+SECURITIES)\)\s*\n',
+                  'B': cusip_fmt + '[\s\t\r]*[\n]?' + r'[\s\t\r]*' +  \
+    r'\(CUSIP\s+(?:NUMBER|NUMBER\s+OF\s+CLASS\s+OF\s+SECURITIES)\)\s*\n',
+                  'C': '[\s_]+' + cusip_hdr + '[ _]{0,50}' + cusip_fmt + '\s+',
+                  'D': '[\s_]+' + cusip_hdr + '(?:\n[\s_]{0,50}){1,2}' + cusip_fmt + '\s+'
+                 }
+
+    df_list = []
+
+    for key, regex in regex_dict.items():
+
+        matches = re.findall(regex, text.upper())
+
+        cusips = [re.sub('[^0-9A-Z]', '', match) for match in matches if len(match) > 0]
+        check_digits = [calculate_cusip_check_digit(cusip) for cusip in cusips]
+
+        if(len(cusips)):
+            df = pd.DataFrame({'cusip': cusips, 'check_digit': check_digits})
+            df['format'] = key
+            df = df[["cusip", "check_digit", "format"]]
+
+        else:
+            df = pd.DataFrame({"cusip": [], "check_digit": [], "format": []})
+
+        df_list.append(df)
+
+
+    full_df = pd.concat(df_list)
+
+    if(full_df.shape[0]):
+
+        formats = full_df.groupby('cusip').apply(lambda x: ''.join(x['format'].unique().tolist()))
+        full_df['formats'] = full_df['cusip'].apply(lambda x: formats[x])
+        full_df = full_df[["cusip", "check_digit", "formats"]]
+        full_df = full_df.drop_duplicates().reset_index(drop = True)
+
+        return(full_df)
+
+    else:
+
+        full_df = pd.DataFrame({"cusip": [None], "check_digit": [None], "formats": [None]})
+
+    return(full_df)
+        
+    
+    
 def get_cusip_cik(file_name):
     
     try:
+        soup = get_soup(file_name)
+        
+        cik, company_name = get_subject_cik_company_name_from_document(soup)
+        
+        if(cik is None or company_name is None):
+            
+            cik, company_name = get_subject_cik_company_name_from_index_page(file_name)
+            
+        text = soup.get_text()
+        
+        df = extract_cusips(text)
+        
+        df['file_name'] = file_name
+        df['cik'] = cik
+        df['company_name'] = company_name
+
+        df['cik'] = df['cik'].astype(np.int64)
+        df['check_digit'] = df['check_digit'].astype(np.int64)
+        
+        df = df[['file_name', 'cusip', 'check_digit', 'cik', 'company_name', 'formats']]
+        
+        return(df)
     
-        url = get_filing_txt_url(file_name)
-        page = requests.get(url)
-        # Following three lines omit source code for added files, pdfs, gifs, etc...
-        page_end = re.search(b'</DOCUMENT>', page.content).end() 
-        content = page.content[:page_end] + b'\n</SEC-DOCUMENT>'
-        soup = BeautifulSoup(content, 'html.parser')
-
-        if(exceeded_sec_request_limit(soup)):
-
-            raise ConnectionRefusedError("Hit SEC's too many requests page. Abort")
-
-
-        cik, company_name = get_subject_cik_company_name(file_name, soup)
-
-        text = soup.getText()
-
-        cusip_hdr = r'CUSIP\s+(?:No\.|NO\.|#|Number|NUMBER):?'
-        cusip_fmt = '((?:[0-9A-Z]{1}[ -]{0,3}){6,9})'
-
-        regex_dict = {'A': cusip_fmt + r'[\n]?[_\.-]?\s+(?:[_\.-]{9,})?[\s\r\t\n]*' +  \
-        r'\(CUSIP\s+(?:Number|NUMBER|number|Number\s+of\s+Class\s+of\s+Securities|NUMBER\s+OF\s+CLASS\s+OF\s+SECURITIES)\)',
-                      'B': cusip_fmt + '[\s\t\r]*[\n]?' + r'[\s\t\r]*' +  \
-        r'\(CUSIP\s+(?:Number|NUMBER|number|Number\s+of\s+Class\s+of\s+Securities|NUMBER\s+OF\s+CLASS\s+OF\s+SECURITIES)\)',
-                      'C': '[\s_]+' + cusip_hdr + '[ _]{0,50}' + cusip_fmt + '\s+',
-                      'D': '[\s_]+' + cusip_hdr + '(?:\n[\s_]{0,50}){1,2}' + cusip_fmt + '\s+'
-                     }
-                                                  
-        df_list = []
-
-        for key, regex in regex_dict.items():
-
-            matches = re.findall(regex, text)
-
-            cusips = [re.sub('[^0-9A-Z]', '', match) for match in matches if len(match) > 0]
-            check_digits = [calculate_cusip_check_digit(cusip) for cusip in cusips]
-
-            if(len(cusips)):
-                df = pd.DataFrame({'cusip': cusips, 'check_digit': check_digits})
-                df['format'] = key
-                df['file_name'] = file_name
-                df['cik'] = cik
-                df['company_name'] = company_name
-                df = df[["file_name", "cusip", "cik", "check_digit", "company_name", "format"]]
-
-            else:
-                df = pd.DataFrame({"file_name": [], "cusip": [], "cik": [], "check_digit": [], \
-                                   "company_name": [], "format": []})
-
-            df_list.append(df)
-
-
-        full_df = pd.concat(df_list)
-
-        if(full_df.shape[0]):
-
-            formats = full_df.groupby('cusip').apply(lambda x: ''.join(x['format'].unique().tolist()))
-
-            full_df['formats'] = full_df['cusip'].apply(lambda x: formats[x])
-
-            full_df = full_df[['file_name', 'cusip', 'check_digit', 'cik', 'company_name', 'formats']]
-
-            full_df = full_df.drop_duplicates().reset_index(drop = True)
-
-            full_df['cik'] = full_df['cik'].astype(np.int64)
-            full_df['check_digit'] = full_df['check_digit'].astype(np.int64)
-
-            return(full_df)
-
-        else:
-
-            full_df = pd.DataFrame({"file_name": [file_name], "cusip": [None], "check_digit": [None], \
-                                    "cik": cik, "company_name": company_name, "formats": [None]})
-        
-        return(full_df)
-        
     except ConnectionRefusedError:
         
         raise
@@ -348,8 +368,6 @@ def get_cusip_cik(file_name):
     except:
         
         return(None)
-
-        
 
         
 def get_cusip_cik_from_list_df(filings_list):
