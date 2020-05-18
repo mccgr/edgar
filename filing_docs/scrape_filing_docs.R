@@ -3,9 +3,7 @@ library(dplyr, warn.conflicts = FALSE)
 library(DBI)
 library(rvest, quietly = TRUE)
 
-EDGAR_CODE_DIR <- Sys.getenv('EDGAR_CODE_DIR')
-
-source(paste0(EDGAR_CODE_DIR, '/', 'filing_docs/scrape_filing_doc_functions.R'))
+source('filing_docs/scrape_filing_doc_functions.R')
 
 fix_names <- function(df) {
     colnames(df) <- tolower(colnames(df))
