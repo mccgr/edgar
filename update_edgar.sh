@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-echo "Running get_ciks.py ..."
-filer_ciks/get_ciks.R
+# echo "Running get_ciks.py ..."
+# filer_ciks/get_ciks.R
 echo "Running get_filings.R ..."
 core/get_filings.R
 echo "Running get_accession_nos.R ..."
