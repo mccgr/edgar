@@ -1,7 +1,7 @@
 raw_directory <- Sys.getenv("EDGAR_DIR")
 
-library(RPostgreSQL)
-library(dplyr)
+library(DBI)
+library(dplyr, warn.conflicts = FALSE)
 library(tools)
 
 get_file_path <- function(file_name, document) {
@@ -11,7 +11,7 @@ get_file_path <- function(file_name, document) {
 
 get_file_list <- function(num_files = Inf) {
 
-    pg <- dbConnect(PostgreSQL())
+    pg <- dbConnect(RPostgres::Postgres())
 
     rs <- dbExecute(pg, "SET search_path TO edgar")
 

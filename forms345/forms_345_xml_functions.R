@@ -3,14 +3,11 @@ library(RPostgreSQL)
 library(XML)
 library(rjson)
 library(RCurl)
-library(dplyr)
-library(lubridate)
-library(rvest)
+library(dplyr, warn.conflicts = FALSE)
+library(lubridate, warn.conflicts = FALSE)
+library(rvest, warn.conflicts = FALSE)
 
-EDGAR_CODE_DIR <- Sys.getenv('EDGAR_CODE_DIR')
-
-source(paste0(EDGAR_CODE_DIR, '/filing_docs/scrape_filing_doc_functions.R'))
-
+source('filing_docs/scrape_filing_doc_functions.R')
 
 xml_url_to_json <- function(url) {
 

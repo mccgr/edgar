@@ -4,7 +4,6 @@
 
 This README file describes the collection of tables used to store data extracted from the xml files associated with the filings for Forms 3, 4 and 5.
 
-
 ## List of tables
 
 * `forms345_header`: This table contains all information at the heading of each xml file, as well as that contained in the `remarks` node. This set of information corresponds with all information not contained in any of the subsequent tables mentioned below. The variables are:
@@ -161,16 +160,13 @@ This README file describes the collection of tables used to store data extracted
   - `document`: As above
   - `fully_processed`: A boolean variable which is `True` if the xml file for a filing with the given `file_name` and `document` has been fully processed by `process_345_filing`, and `False` otherwise.
 
-
-
-  ### Tables used in updating tables above
+### Tables used in updating tables above
 
 - `filings`: Index of all filings in the SEC EDGAR database (since 1993). Code: [`get_filings.R`](get_filings.R).
 - `filing_docs`: Table listing the documents associated with each filing.
 See [here](filing_docs.md). Code: [`get_filing_docs.R`](get_filing_docs.R).
 
 ## Code
-
 
 - [`get_form_345_filing_docs.R`](get_form_345_filing_docs.R): This program scrapes the metadata for filings from `edgar.filings` with the `type` being equal to `3`, `4`, `5`, `3/A`, `4/A` or `5/A`, and writes the subsequent data to `edgar.filing_docs`.
 
