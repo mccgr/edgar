@@ -13,6 +13,20 @@ valid_cusip9s <-
     filter(substr(cusip, 9, 9) == as.character(check_digit)) %>%
     compute()
 
+# Flag all filings that contain multiple valid 9-digit CUSIPs
+# that do not share 6-digit CUSIPs. We need to delete these.
+mult_cusips <-
+    valid_cusip9s %>%
+    mutate(cusip6 = substr(cusip, 1L, 6L)) %>%
+    select(file_name, cusip6) %>%
+    distinct() %>%
+    group_by(file_name) %>%
+    summarize(n_cusips = n()) %>%
+    filter(n_cusips > 1) %>%
+    ungroup() %>%
+    select(file_name) %>%
+    compute()
+
 dbExecute(pg, "DROP TABLE IF EXISTS cusip_cik_test")
 
 # This code takes only the valid 9-digit CUSIPs from the filings
@@ -23,6 +37,7 @@ cusip_cik_test <-
     union_all(
         cusip_cik %>%
             anti_join(valid_cusip9s, by = "file_name")) %>%
+    anti_join(mult_cusips) %>%
     compute(name = "cusip_cik_test", temporary = FALSE)
 
 rs <- dbExecute(pg, "ALTER TABLE cusip_cik_test OWNER TO edgar")
