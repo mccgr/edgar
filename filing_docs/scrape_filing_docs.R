@@ -1,6 +1,12 @@
 #!/usr/bin/env Rscript
-source("filing_docs/download_filing_docs_functions.R")
+library(dplyr, warn.conflicts = FALSE)
+library(DBI)
 library(parallel)
+
+target_schema <- "edgar"
+target_table <- "filing_docs"
+
+source("filing_docs/download_filing_docs_functions.R")
 
 pg <- dbConnect(RPostgres::Postgres())
 

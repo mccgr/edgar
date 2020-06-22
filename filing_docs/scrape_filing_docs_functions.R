@@ -1,5 +1,6 @@
 #!/usr/bin/env Rscript
 library(parallel)
+library(rvest)
 
 # Functions ----
 get_index_url <- function(file_name) {
@@ -91,7 +92,7 @@ get_filing_docs <- function(file_name) {
     try({
         df <- filing_docs_df(file_name)
         pg <- dbConnect(RPostgres::Postgres())
-        dbWriteTable(pg, c("edgar", "filing_docs"),
+        dbWriteTable(pg, c(target_schema, target_table),
                      df, append = TRUE, row.names = FALSE)
         dbDisconnect(pg)
 
@@ -134,7 +135,7 @@ get_filing_docs_alt <- function(file_name) {
     }
 
     pg <- dbConnect(RPostgres::Postgres())
-    dbWriteTable(pg, c("edgar", "filing_docs_alt"),
+    dbWriteTable(pg, c(target_schema, target_table),
                  df, append = TRUE, row.names = FALSE)
     dbDisconnect(pg)
 
@@ -178,10 +179,10 @@ get_filings_by_type <- function(type_regex) {
         filings %>%
         filter(form_type %~% type_regex)
 
-    new_table <- !dbExistsTable(pg, c("edgar", "filing_docs"))
+    new_table <- !dbExistsTable(pg, c(target_schema, target_table))
 
     if (!new_table) {
-        filing_docs <- tbl(pg, sql("SELECT * FROM edgar.filing_docs"))
+        filing_docs <- tbl(pg, sql(paste0("SELECT * FROM ", target_schema, ".", target_table)))
         type_filings <- type_filings %>% anti_join(filing_docs, by = "file_name")
     }
 
@@ -198,14 +199,15 @@ get_filings_by_type <- function(type_regex) {
 process_filings <- function(filings_df) {
 
     pg <- dbConnect(RPostgres::Postgres())
-    new_table <- !dbExistsTable(pg, c("edgar", "filing_docs"))
+    new_table <- !dbExistsTable(pg, c(target_schema, target_table))
 
     system.time(temp <- mclapply(filings_df$file_name, get_filing_docs, mc.cores = 24))
 
     if (new_table) {
-        rs <- dbExecute(pg, "CREATE INDEX ON edgar.filing_docs (file_name)")
-        rs <- dbExecute(pg, "ALTER TABLE edgar.filing_docs OWNER TO edgar")
-        rs <- dbExecute(pg, "GRANT SELECT ON TABLE edgar.filing_docs TO edgar_access")
+        rs <- dbExecute(pg, paste0("SET search_path TO ", target_schema))
+        rs <- dbExecute(pg, paste0("CREATE INDEX ON ", target_table, " (file_name)"))
+        rs <- dbExecute(pg, paste0("ALTER TABLE ", target_table, " OWNER TO edgar"))
+        rs <- dbExecute(pg, paste0("GRANT SELECT ON TABLE ", target_table, " TO edgar_access"))
     }
 
     rs <- dbDisconnect(pg)
@@ -217,15 +219,16 @@ process_filings <- function(filings_df) {
 process_filings_alt <- function(filings_df) {
 
     pg <- dbConnect(RPostgres::Postgres())
-    new_table <- !dbExistsTable(pg, c("edgar", "filing_docs_alt"))
+    new_table <- !dbExistsTable(pg, c(target_schema, target_table))
 
     system.time(temp <- mclapply(filings_df$file_name,
                                  get_filing_docs_alt, mc.cores = 24))
 
     if (new_table) {
-        rs <- dbExecute(pg, "CREATE INDEX ON edgar.filing_docs_alt (file_name)")
-        rs <- dbExecute(pg, "ALTER TABLE edgar.filing_docs_alt OWNER TO edgar")
-        rs <- dbExecute(pg, "GRANT SELECT ON TABLE edgar.filing_docs_alt TO edgar_access")
+        rs <- dbExecute(pg, paste0("SET search_path TO ", target_schema))
+        rs <- dbExecute(pg, paste0("CREATE INDEX ON ", target_table, " (file_name)"))
+        rs <- dbExecute(pg, paste0("ALTER TABLE ", target_table, " OWNER TO edgar"))
+        rs <- dbExecute(pg, paste0("GRANT SELECT ON TABLE ", target_table, " TO edgar_access"))
     }
 
     rs <- dbDisconnect(pg)
