@@ -70,13 +70,9 @@ download_exceptional_filing_document <- function(file_name, document, html_link)
 
     # Return the local filename if the file exists
     return(file.exists(local_filename))
-
-
 }
 
 browse_filing_doc <- function(path) {
-
     local_filename <- file.path(raw_directory, path)
-
     browseURL(local_filename)
 }
