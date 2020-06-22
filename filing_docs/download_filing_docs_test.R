@@ -2,9 +2,9 @@ library(DBI)
 library(dplyr, warn.conflicts = FALSE)
 library(tools)
 
-target_schema <- "edgar"
-filing_docs_table <- "filing_docs"
-processed_table <- "filing_docs_processed"
+target_schema <- "edgar_test"
+filing_docs_table <- "filing_docs_test"
+processed_table <- "filing_docs_processed_test"
 
 # Functions ----
 get_file_list <- function(num_files = Inf, form_types = NULL) {
@@ -153,7 +153,7 @@ rs <- dbDisconnect(pg)
 while (nrow(files <- get_file_list(num_files = 1000)) > 0) {
     print("Getting files...")
     st <- system.time(files$downloaded <-
-                          unlist(lapply(files$html_link, get_filing_docs)))
+                    unlist(lapply(files$html_link, get_filing_docs)))
 
     print(sprintf("Downloaded %d files in %3.2f seconds",
                   nrow(files), st[["elapsed"]]))
@@ -165,8 +165,8 @@ while (nrow(files <- get_file_list(num_files = 1000)) > 0) {
     pg <- dbConnect(RPostgreSQL::PostgreSQL())
     rs <- dbExecute(pg, paste0("SET search_path TO ", target_schema, ", edgar, public"))
     dbWriteTable(pg, processed_table, downloaded_files,
-                 append = !new_table,
-                 row.names = FALSE)
+             append = !new_table,
+             row.names = FALSE)
     if (new_table) {
         dbGetQuery(pg, paste("CREATE INDEX ON ", processed_table," (file_name)"))
         dbGetQuery(pg, paste("ALTER TABLE ", processed_table," OWNER TO edgar"))
