@@ -14,7 +14,8 @@ rs <- dbExecute(pg, "SET search_path TO edgar_test, edgar, public")
 rs <- dbExecute(pg, "SET work_mem = '5GB'")
 
 get_file_names <- function() {
-    new_table <- !dbExistsTable(pg, "filing_docs_test")
+    assign("new_table", !dbExistsTable(pg, "filing_docs_test"),
+           env = .GlobalEnv)
 
     filings <- tbl(pg, "test_sample")
 
