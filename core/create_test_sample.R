@@ -13,7 +13,7 @@ test_sample <-
     filings %>%
     filter(date_filed >= "2020-01-01") %>%
     select(file_name) %>%
-    collect(n=1000) %>%
+    collect(n=3000) %>%
     copy_to(pg, ., name="test_sample", temporary = FALSE)
 
 rs <- dbExecute(pg, "ALTER TABLE test_sample OWNER TO edgar")

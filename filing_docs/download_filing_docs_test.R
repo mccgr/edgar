@@ -150,7 +150,7 @@ raw_directory <- Sys.getenv("EDGAR_DIR")
 pg <- dbConnect(RPostgreSQL::PostgreSQL())
 new_table <- !dbExistsTable(pg, c(target_schema, processed_table))
 rs <- dbDisconnect(pg)
-while (nrow(files <- get_file_list(num_files = 1000)) > 0) {
+while (nrow(files <- get_file_list(num_files = 5000)) > 0) {
     print("Getting files...")
     st <- system.time(files$downloaded <-
                     unlist(lapply(files$html_link, get_filing_docs)))

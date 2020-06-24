@@ -3,18 +3,18 @@ library(dplyr, warn.conflicts = FALSE)
 library(DBI)
 
 target_schema <- "edgar_test"
-target_table <- "filing_docs_test"
+target_table <- "filing_docs_test_old"
 
 source("filing_docs/scrape_filing_docs_functions.R")
 library(parallel)
 
 pg <- dbConnect(RPostgres::Postgres())
 
-rs <- dbExecute(pg, "SET search_path TO edgar_test, edgar, public")
+rs <- dbExecute(pg, paste0("SET search_path TO ", target_schema, ", edgar, public"))
 rs <- dbExecute(pg, "SET work_mem = '5GB'")
 
 get_file_names <- function() {
-    assign("new_table", !dbExistsTable(pg, "filing_docs_test"),
+    assign("new_table", !dbExistsTable(pg, target_table),
            env = .GlobalEnv)
 
     filings <- tbl(pg, "test_sample")
@@ -24,7 +24,7 @@ get_file_names <- function() {
         select(file_name)
 
     if (!new_table) {
-        filing_docs <- tbl(pg, "filing_docs_test")
+        filing_docs <- tbl(pg, target_table)
         def14_a <- file_names %>% anti_join(filing_docs, by = "file_name")
     } else {
         def14_a <- file_names
@@ -37,10 +37,10 @@ get_file_names <- function() {
 table_setup <- function() {
     pg <- dbConnect(RPostgres::Postgres())
 
-    rs <- dbExecute(pg, "SET search_path TO edgar, public")
-    rs <- dbExecute(pg, "CREATE INDEX ON filing_docs_test (file_name)")
-    rs <- dbExecute(pg, "ALTER TABLE filing_docs_test OWNER TO edgar")
-    rs <- dbExecute(pg, "GRANT SELECT ON TABLE filing_docs_test TO edgar_access")
+    rs <- dbExecute(pg, paste0("SET search_path TO ", target_schema, ", edgar, public"))
+    rs <- dbExecute(pg, paste0("CREATE INDEX ON ", target_table, " (file_name)"))
+    rs <- dbExecute(pg, paste0("ALTER TABLE ", target_table, " OWNER TO edgar"))
+    rs <- dbExecute(pg, paste0("GRANT SELECT ON TABLE ", target_table, " TO edgar_access"))
 
     rs <- dbDisconnect(pg)
 }
@@ -57,7 +57,7 @@ while(nrow(file_names <- get_file_names()) > 0) {
 
         if (nrow(df) > 0) {
             cat("Writing data ...\n")
-            dbWriteTable(pg, "filing_docs_test",
+            dbWriteTable(pg, target_table,
                          df, append = TRUE, row.names = FALSE)
 
         } else {
