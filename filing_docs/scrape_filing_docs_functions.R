@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 library(parallel)
 library(rvest)
+library(dplyr)
 
 # Functions ----
 get_index_url <- function(file_name) {
@@ -16,6 +17,20 @@ get_index_url <- function(file_name) {
 
 html_table_mod <- function(table) {
     lapply(html_table(table), function(x) mutate(x, Type = as.character(Type)))
+}
+
+fix_names <- function(df) {
+    colnames(df) <- tolower(colnames(df))
+    df
+}
+
+get_filing_doc_url <- function(file_name, document) {
+
+    url <- paste('https://www.sec.gov/Archives',
+                 gsub("(\\d{10})-(\\d{2})-(\\d{6})\\.txt", "\\1\\2\\3", file_name), document, sep = '/')
+
+    return(url)
+
 }
 
 filing_docs_df <- function(file_name) {
@@ -45,47 +60,21 @@ filing_docs_df <- function(file_name) {
                    type = as.character(type),
                    description = as.character(description))
 
+        df$url <- file_tables %>% html_nodes(xpath = 'tr/td/a[@href]') %>%
+            html_attr('href') %>% stringr::str_replace('^/Archives/', '')
+
+        url_full <- paste0('https://www.sec.gov/Archives/', df$url)
+
+        norm_url <- get_filing_doc_url(df$file_name, df$document)
+
+        df$url[url_full == norm_url] <- NA
+
         colnames(df) <- tolower(colnames(df))
     }
 
     return(df)
 }
 
-filing_docs_df_with_href <- function(file_name) {
-
-    head_url <- get_index_url(file_name)
-
-    table_nodes <-
-        read_html(head_url, encoding="Latin1") %>%
-        html_nodes("table")
-
-    filing_doc_table_indices <- which(table_nodes %>% html_attr("class") == "tableFile")
-
-    file_tables <- table_nodes[filing_doc_table_indices]
-
-    if (length(file_tables) < 1) {
-        df <- tibble(seq = NA, description = NA, document = NA, type = NA,
-                     size = NA, file_name = file_name)
-    } else {
-
-        df <- file_tables %>%
-            html_table() %>%
-            bind_rows() %>%
-            fix_names() %>%
-            mutate(file_name = file_name, type = as.character(type))
-
-        colnames(df) <- tolower(colnames(df))
-
-        hrefs <- file_tables %>% html_nodes("tr") %>% html_nodes("a") %>% html_attr("href")
-
-        hrefs <- unlist(lapply(hrefs, function(x) {paste0('https://www.sec.gov', x)}))
-
-        df$html_link <- hrefs
-
-    }
-
-    return(df)
-}
 
 get_filing_docs <- function(file_name) {
 
