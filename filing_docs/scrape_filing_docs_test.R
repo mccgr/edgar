@@ -3,7 +3,7 @@ library(dplyr, warn.conflicts = FALSE)
 library(DBI)
 
 target_schema <- "edgar_test"
-target_table <- "filing_docs_test_old"
+target_table <- "filing_docs_test"
 
 source("filing_docs/scrape_filing_docs_functions.R")
 library(parallel)

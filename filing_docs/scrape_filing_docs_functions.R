@@ -1,7 +1,8 @@
 #!/usr/bin/env Rscript
 library(parallel)
 library(rvest)
-library(dplyr)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
 
 # Functions ----
 get_index_url <- function(file_name) {
@@ -58,10 +59,15 @@ filing_docs_df <- function(file_name) {
             fix_names() %>%
             mutate(file_name = file_name,
                    type = as.character(type),
-                   description = as.character(description))
+                   description = as.character(description)) %>%
+            separate(col = document,
+                     into = c("document", "document_note"),
+                     sep = "[:space:]+")
 
-        df$url <- file_tables %>% html_nodes(xpath = 'tr/td/a[@href]') %>%
-            html_attr('href') %>% stringr::str_replace('^/Archives/', '')
+        df$url <- file_tables %>%
+            html_nodes(xpath = 'tr/td/a[@href]') %>%
+            html_attr('href') %>%
+            stringr::str_replace('^.*(/ix?doc=)?/Archives/', '')
 
         url_full <- paste0('https://www.sec.gov/Archives/', df$url)
 
@@ -88,47 +94,6 @@ get_filing_docs <- function(file_name) {
         return(TRUE)
     }, { return(FALSE) })
 
-}
-
-get_filing_docs_alt <- function(file_name) {
-
-    try({head_url <- get_index_url(file_name)
-
-    table_nodes <-
-        read_html(head_url, encoding="Latin1") %>%
-        html_nodes("table")
-
-    if (length(table_nodes) < 1) {
-        df <- tibble(seq = NA, description = NA, document = NA, type = NA,
-                     size = NA, file_name = file_name)
-    } else {
-
-        df <-
-            table_nodes %>%
-            html_table() %>%
-            bind_rows() %>%
-            fix_names() %>%
-            mutate(file_name = file_name, type = as.character(type))
-
-        colnames(df) <- tolower(colnames(df))
-
-        hrefs <-
-            table_nodes %>%
-            html_nodes("tr") %>%
-            html_nodes("a") %>%
-            html_attr("href")
-
-        hrefs <- unlist(lapply(hrefs, function(x) {paste0('https://www.sec.gov', x)}))
-
-        df$html_link <- hrefs
-    }
-
-    pg <- dbConnect(RPostgres::Postgres())
-    dbWriteTable(pg, c(target_schema, target_table),
-                 df, append = TRUE, row.names = FALSE)
-    dbDisconnect(pg)
-
-    return(TRUE)}, {return(FALSE)})
 }
 
 fix_names <- function(df) {
@@ -195,33 +160,13 @@ process_filings <- function(filings_df) {
     if (new_table) {
         rs <- dbExecute(pg, paste0("SET search_path TO ", target_schema))
         rs <- dbExecute(pg, paste0("CREATE INDEX ON ", target_table, " (file_name)"))
-        rs <- dbExecute(pg, paste0("ALTER TABLE ", target_table, " OWNER TO edgar"))
-        rs <- dbExecute(pg, paste0("GRANT SELECT ON TABLE ", target_table, " TO edgar_access"))
+        rs <- dbExecute(pg, paste0("ALTER TABLE ", target_table,
+                                   " OWNER TO edgar"))
+        rs <- dbExecute(pg, paste0("GRANT SELECT ON TABLE ", target_table,
+                                   " TO edgar_access"))
     }
 
     rs <- dbDisconnect(pg)
-    temp <- unlist(temp)
-
-    return(temp)
-}
-
-process_filings_alt <- function(filings_df) {
-
-    pg <- dbConnect(RPostgres::Postgres())
-    new_table <- !dbExistsTable(pg, c(target_schema, target_table))
-
-    system.time(temp <- mclapply(filings_df$file_name,
-                                 get_filing_docs_alt, mc.cores = 24))
-
-    if (new_table) {
-        rs <- dbExecute(pg, paste0("SET search_path TO ", target_schema))
-        rs <- dbExecute(pg, paste0("CREATE INDEX ON ", target_table, " (file_name)"))
-        rs <- dbExecute(pg, paste0("ALTER TABLE ", target_table, " OWNER TO edgar"))
-        rs <- dbExecute(pg, paste0("GRANT SELECT ON TABLE ", target_table, " TO edgar_access"))
-    }
-
-    rs <- dbDisconnect(pg)
-
     temp <- unlist(temp)
 
     return(temp)
