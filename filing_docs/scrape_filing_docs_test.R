@@ -2,9 +2,9 @@
 library(dplyr, warn.conflicts = FALSE)
 library(DBI)
 
-target_schema <- "edgar_test"
+target_schema <- "edgar"
 target_table <- "filing_docs"
-filings_table <- "test_sample"
+filings_table <- "filings"
 source("filing_docs/scrape_filing_docs_functions.R")
 library(parallel)
 
@@ -12,7 +12,7 @@ pg <- dbConnect(RPostgres::Postgres())
 
 rs <- dbExecute(pg, paste0("SET search_path TO ", target_schema))
 rs <- dbExecute(pg, "SET work_mem = '5GB'")
-
+rs <- dbExecute(pg, "SET max_parallel_workers = 4")
 get_file_names <- function() {
     assign("new_table", !dbExistsTable(pg, target_table),
            env = .GlobalEnv)
