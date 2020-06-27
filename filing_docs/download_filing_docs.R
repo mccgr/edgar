@@ -1,3 +1,4 @@
+#!/usr/bin/env Rscript
 library(DBI)
 library(dplyr, warn.conflicts = FALSE)
 library(tools)
