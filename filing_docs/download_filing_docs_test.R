@@ -100,8 +100,8 @@ while (nrow(files <- get_file_list(num_files = 5000)) > 0) {
              append = !new_table,
              row.names = FALSE)
     if (new_table) {
-        dbGetQuery(pg, paste("CREATE INDEX ON ", processed_table," (file_name)"))
-        dbGetQuery(pg, paste("ALTER TABLE ", processed_table," OWNER TO edgar"))
+        dbGetQuery(pg, paste("CREATE INDEX ON ", processed_table, " (file_name)"))
+        dbGetQuery(pg, paste("ALTER TABLE ", processed_table, " OWNER TO edgar"))
         dbGetQuery(pg, paste("GRANT SELECT ON TABLE ", processed_table," TO edgar_access"))
         new_table <- FALSE
     }
