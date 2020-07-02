@@ -27,6 +27,16 @@ mult_cusips <-
     select(file_name) %>%
     compute()
 
+bad_cusips <-
+    cusip_cik %>%
+    filter(nchar(cusip)==9L) %>%
+    mutate(bad_cusip = case_when(! right(cusip, 1L) %~% '[0-9]' ~ TRUE,
+                                 as.integer(right(cusip, 1L)) != check_digit ~ TRUE,
+                                 TRUE ~ FALSE)) %>%
+    filter(bad_cusip) %>%
+    select(-bad_cusip) %>%
+    compute()
+
 dbExecute(pg, "DROP TABLE IF EXISTS cusip_cik_test")
 
 # This code takes only the valid 9-digit CUSIPs from the filings
@@ -37,7 +47,9 @@ cusip_cik_test <-
     union_all(
         cusip_cik %>%
             anti_join(valid_cusip9s, by = "file_name")) %>%
-    anti_join(mult_cusips) %>%
+    anti_join(mult_cusips) %>% anti_join(bad_cusips) %>%
     compute(name = "cusip_cik_test", temporary = FALSE)
 
 rs <- dbExecute(pg, "ALTER TABLE cusip_cik_test OWNER TO edgar")
+
+dbDisconnect(pg)
