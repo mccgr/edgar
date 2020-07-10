@@ -6,7 +6,7 @@ library(parallel)
 target_schema <- "edgar"
 target_table <- "filing_docs"
 
-source("filing_docs/download_filing_docs_functions.R")
+source("filing_docs/scrape_filing_docs_functions.R")
 
 pg <- dbConnect(RPostgres::Postgres())
 
@@ -39,7 +39,7 @@ while(nrow(file_names <- get_file_names()) > 0) {
     batch <- batch + 1
     cat("Processing batch", batch, "\n")
 
-    temp <- mclapply(file_names$file_name, filing_docs_df, mc.cores = 6)
+    temp <- mclapply(file_names$file_name, filing_docs_df, mc.cores = 8)
     if (length(temp) > 0) {
         df <- bind_rows(temp)
 

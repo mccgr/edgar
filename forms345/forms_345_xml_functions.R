@@ -7,7 +7,7 @@ library(dplyr, warn.conflicts = FALSE)
 library(lubridate, warn.conflicts = FALSE)
 library(rvest, warn.conflicts = FALSE)
 
-source('filing_docs/scrape_filing_doc_functions.R')
+source('filing_docs/scrape_filing_docs_functions.R')
 
 xml_url_to_json <- function(url) {
 
