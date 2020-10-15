@@ -62,7 +62,7 @@ filing_docs_df <- function(file_name) {
                    description = as.character(description)) %>%
             separate(col = document,
                      into = c("document", "document_note"),
-                     sep = "[:space:]+")
+                     sep = "[[:space:]]+")
 
         df$url <- file_tables %>%
             html_nodes(xpath = 'tr/td/a[@href]') %>%
