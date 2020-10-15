@@ -2,7 +2,7 @@
 library(parallel)
 library(rvest)
 library(dplyr, warn.conflicts = FALSE)
-library(tidyr)
+library(tidyr, warn.conflicts = FALSE)
 
 # Functions ----
 get_index_url <- function(file_name) {

@@ -10,7 +10,6 @@ library(rvest, warn.conflicts = FALSE)
 source('filing_docs/scrape_filing_docs_functions.R')
 
 xml_url_to_json <- function(url) {
-
     try({fileURL <- file.path(url)
     xml_parse <- xmlParse(getURL(fileURL))
     xml_root <- xmlRoot(xml_parse)
@@ -33,7 +32,6 @@ get_filing_document_url <- function(file_name, document) {
 
 
 get_xml_root <- function(file_name, document) {
-
     try({url <- get_filing_document_url(file_name, document)
     fileURL <- file.path(url)
     xml_parse <- xmlParse(getURL(fileURL))
@@ -51,18 +49,14 @@ get_filing_doc_html_link <- function(file_name, document) {
     doc_url <- paste0("https://www.sec.gov", doc_stem)
 
     return(doc_url)
-
 }
 
-
 get_xml_root_by_url <- function(url) {
-
     try({fileURL <- file.path(url)
     xml_parse <- xmlParse(getURL(fileURL))
     xml_root <- xmlRoot(xml_parse)
     return(xml_root)}, return(NA))
 }
-
 
 get_info_from_node <- function(node) {
 
@@ -71,10 +65,8 @@ get_info_from_node <- function(node) {
     values <- c()
 
     for(name in subnode_names) {
-
         subnames <- names(node[[name]])
         if(is.null(subnames)) {
-
             names <- c(names, name)
 
             if(is.null(node[[name]])) {
@@ -82,21 +74,14 @@ get_info_from_node <- function(node) {
             } else {
                 values <- c(values, node[[name]])
             }
-
         } else {
-
             subtree_df <- get_info_from_node(node[[name]])
             names <- c(names, paste(name, subtree_df$names, sep = "_"))
             values <- c(values, subtree_df$values)
-
         }
-
     }
-
-
     df <- data.frame(names, values, stringsAsFactors = FALSE)
     return(df)
-
 }
 
 
