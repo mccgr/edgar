@@ -64,6 +64,7 @@ filing_docs_df <- function(file_name) {
                      into = c("document", "document_note"),
                      sep = "[[:space:]]+")
 
+
         df$url <- file_tables %>%
             html_nodes(xpath = 'tr/td/a[@href]') %>%
             html_attr('href') %>%
