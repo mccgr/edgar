@@ -39,27 +39,28 @@ getSECIndexFile <- function(year, quarter) {
 
 addIndexFileToDatabase <- function(data) {
     if (is.null(data)) return(NULL)
-    library(RPostgreSQL)
-    pg <- dbConnect(PostgreSQL())
+    pg <- dbConnect(RPostgres::Postgres())
 
-    rs <- dbWriteTable(pg, c("edgar", "filings"), data,
+    dbExecute(pg, "SET search_path TO edgar")
+
+    rs <- dbWriteTable(pg, "filings", data,
                        append=TRUE, row.names=FALSE)
 
-    rs <- dbGetQuery(pg, "ALTER TABLE edgar.filings OWNER TO edgar")
-    rs <- dbGetQuery(pg, "GRANT SELECT ON TABLE edgar.filings TO edgar_access")
+    rs <- dbExecute(pg, "ALTER TABLE filings OWNER TO edgar")
+    rs <- dbExecute(pg, "GRANT SELECT ON TABLE filings TO edgar_access")
     comment <- 'CREATED USING get_filings_full.R/get_filings_incremental.R IN iangow-public/edgar'
-    db_comment <- paste0("COMMENT ON TABLE edgar.filings IS '",
+    db_comment <- paste0("COMMENT ON TABLE filings IS '",
                          comment, " ON ", Sys.time() , "'; ")
-    dbGetQuery(pg, db_comment)
+    dbExecute(pg, db_comment)
     dbDisconnect(pg)
     return(rs)
 }
 
-deleteIndexDataFomDatabase <- function(pg, year, quarter) {
-    if(dbExistsTable(pg, c("edgar", "filings"))) {
-        dbGetQuery(pg, paste(
+deleteIndexDataFromDatabase <- function(pg, year, quarter) {
+    if(dbExistsTable(pg, "filings")) {
+        dbExecute(pg, paste(
             "DELETE
-            FROM edgar.filings
+            FROM filings
             WHERE extract(quarter FROM date_filed)=", quarter,
             " AND extract(year FROM date_filed)=", year))
     }
@@ -70,10 +71,11 @@ updateData <- function(pg, year, quarter) {
 
     cat("Updating data for ", year, "Q", quarter, "...\n", sep="")
     try({
-        deleteIndexDataFomDatabase(pg, year, quarter)
+        deleteIndexDataFromDatabase(pg, year, quarter)
         dbExecute(pg, paste0("DELETE FROM index_last_modified WHERE year=", year,
                                    " AND quarter=", quarter))
-        addIndexFileToDatabase(getSECIndexFile(year, quarter))
+        file <- getSECIndexFile(year, quarter)
+        addIndexFileToDatabase(file)
         dbExecute(pg, paste0("INSERT INTO index_last_modified ",
                                    "SELECT * FROM index_last_modified_new WHERE year=", year,
                                    " AND quarter=", quarter))
@@ -114,7 +116,7 @@ index_last_modified_scraped <-
     mutate(last_modified = getLastUpdate(year, quarter))
 
 # Push results to database ----
-pg <- dbConnect(PostgreSQL())
+pg <- dbConnect(RPostgres::Postgres())
 
 rs <- dbExecute(pg, "SET search_path TO edgar")
 
@@ -122,7 +124,7 @@ rs <- dbWriteTable(pg, "index_last_modified_new", index_last_modified_scraped,
              row.names = FALSE, overwrite = TRUE)
 
 # Compare new data with old to identify needed index files ----
-if (dbExistsTable(pg, c("edgar", "index_last_modified"))) {
+if (dbExistsTable(pg, "index_last_modified")) {
     index_last_modified_new <- tbl(pg, "index_last_modified_new")
     index_last_modified <- tbl(pg, "index_last_modified")
 
