@@ -23,7 +23,7 @@ new_table <- !dbExistsTable(pg, "filing_docs")
 
 if (!new_table) {
     filing_docs <- tbl(pg, "filing_docs")
-    def14_a <- file_names %>% anti_join(filing_docs, by = "file_name")
+    def14_a <- file_names %>% anti_join(filing_docs, by = "file_name", copy = TRUE)
 } else {
     def14_a <- file_names
 }
@@ -36,17 +36,29 @@ get_file_names <- function() {
 batch <- 0
 new <- lubridate::now()
 while(nrow(file_names <- get_file_names()) > 0) {
+    def14_a <-
+        def14_a %>%
+        anti_join(file_names, by = "file_name", copy = TRUE)
+
     batch <- batch + 1
     cat("Processing batch", batch, "\n")
 
-    temp <- mclapply(file_names$file_name, filing_docs_df, mc.cores = 8)
+    temp <- mclapply(file_names$file_name, filing_docs_df, mc.cores = 2)
+
+    # temp <- lapply(file_names$file_name, filing_docs_df)
+
+    # SEC rule: no more than 10 requests per second per IP, otherwise lock IP for 10 min
+    Sys.sleep(0.5)
+
     if (length(temp) > 0) {
         df <- bind_rows(temp)
 
         if (nrow(df) > 0) {
             cat("Writing data ...\n")
+
+            print(df %>% dim())
             dbWriteTable(pg, "filing_docs",
-                         df, append = TRUE, row.names = FALSE)
+                         df %>% select(-document_note, -url), append = TRUE, row.names = FALSE)
 
         } else {
             cat("No data ...\n")
