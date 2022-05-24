@@ -25,11 +25,11 @@ getSECIndexFile <- function(year, quarter) {
 
         # Parse the downloaded file and return the extracted data as a data frame
         temp <-
-            read_fwf(t, fwf_cols(company_name = c(1,62),
-                                  form_type = c(63,74),
-                                  cik = c(75,86),
-                                  date_filed = c(87,98),
-                                  file_name = c(99,150)),
+            read_fwf(t, fwf_cols(company_name = c(1, 62),
+                                  form_type = c(63, 74),
+                                  cik = c(75, 86),
+                                  date_filed = c(87, 98),
+                                  file_name = c(99, 150)),
                      col_types = "ccicc", skip=10,
                      locale = locale(encoding = "macintosh")) %>%
             mutate(date_filed = as.Date(date_filed))
@@ -46,7 +46,7 @@ addIndexFileToDatabase <- function(data) {
     dbExecute(pg, "SET search_path TO edgar")
 
     rs <- dbWriteTable(pg, "filings", data,
-                       append=TRUE, row.names=FALSE)
+                       append = TRUE, row.names = FALSE)
 
     rs <- dbExecute(pg, "ALTER TABLE filings OWNER TO edgar")
     rs <- dbExecute(pg, "GRANT SELECT ON TABLE filings TO edgar_access")
@@ -82,8 +82,8 @@ updateData <- function(pg, year, quarter) {
         file <- getSECIndexFile(year, quarter)
         addIndexFileToDatabase(file)
         dbExecute(pg, paste0("INSERT INTO index_last_modified ",
-                                   "SELECT * FROM index_last_modified_new WHERE year=", year,
-                                   " AND quarter=", quarter))
+                             "SELECT * FROM index_last_modified_new WHERE year=", year,
+                             " AND quarter=", quarter))
         return(TRUE)
         },
         return(FALSE))
