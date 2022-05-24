@@ -2,20 +2,21 @@
 library(lubridate, warn.conflicts = FALSE)
 library(dplyr, warn.conflicts = FALSE)
 library(tidyr)
-library(RPostgreSQL, quietly = TRUE)
-library(rvest, quietly = TRUE)
-library(curl, warn.conflicts = FALSE)
+library(httr)
 library(readr, warn.conflicts = FALSE)
+library(DBI)
+
+ua <- "iandgow@gmail.com"
 
 # Create functions to get filings ----
 getSECIndexFile <- function(year, quarter) {
 
     # Download the zipped index file from the SEC website
-    tf <- tempfile(fileext = ".gz")
-    result <- try(curl_download(
-        url=paste("https://www.sec.gov/Archives/edgar/full-index/",
-                  year,"/QTR", quarter, "/company.gz",sep=""),
-        destfile=tf))
+    url <- paste0("https://www.sec.gov/Archives/edgar/full-index/",
+                  year,"/QTR", quarter, "/company.gz")
+    # Query webpage with default user agent
+    t <- tempfile(fileext = ".gz")
+    GET(url, write_disk(t, overwrite=TRUE), user_agent(ua))
 
     # If we didn't encounter and error downloading the file, parse it
     # and return as a R data frame
@@ -23,7 +24,7 @@ getSECIndexFile <- function(year, quarter) {
 
         # Parse the downloaded file and return the extracted data as a data frame
         temp <-
-            read_fwf(tf, fwf_cols(company_name = c(1,62),
+            read_fwf(t, fwf_cols(company_name = c(1,62),
                                   form_type = c(63,74),
                                   cik = c(75,86),
                                   date_filed = c(87,98),
@@ -91,8 +92,9 @@ getLastUpdate <- function(year, quarter) {
                  year, "/QTR", quarter, "/")
 
     # Scrape the html table from the website for the given year and quarter
-    read_html(url) %>%
-        html_nodes("table") %>%
+    g <- GET(url, user_agent(ua))
+    content(g, encoding = "UTF-8") %>%
+        html_elements("table") %>%
         .[[1]] %>%
         html_table() %>%
         filter(Name == "company.gz") %>%
@@ -119,7 +121,13 @@ index_last_modified_scraped <-
 pg <- dbConnect(RPostgres::Postgres())
 
 rs <- dbExecute(pg, "SET search_path TO edgar")
-
+if (!length(dbListTables(pg))) {
+    try(rs <- dbExecute(pg, "CREATE SCHEMA edgar"))
+    try(rs <- dbExecute(pg, "CREATE ROLE edgar"))
+    try(rs <- dbExecute(pg, "CREATE ROLE edgar_access"))
+    rs <- dbExecute(pg, "ALTER SCHEMA edgar OWNER TO edgar")
+    rs <- dbExecute(pg, paste("GRANT edgar TO", DBI::dbGetInfo(pg)$username))
+}
 rs <- dbWriteTable(pg, "index_last_modified_new", index_last_modified_scraped,
              row.names = FALSE, overwrite = TRUE)
 
