@@ -1,8 +1,8 @@
 #!/usr/bin/env Rscript
 library(dplyr, warn.conflicts = FALSE)
-library(RPostgreSQL, quietly = TRUE)
+library(DBI)
 
-pg <- dbConnect(PostgreSQL())
+pg <- dbConnect(RPostgres::Postgres())
 
 rs <- dbExecute(pg, "SET work_mem='10GB'")
 rs <- dbExecute(pg, "SET search_path TO edgar")
