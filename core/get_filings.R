@@ -5,6 +5,7 @@ library(tidyr)
 library(httr)
 library(readr, warn.conflicts = FALSE)
 library(DBI)
+library(rvest)
 
 ua <- "iandgow@gmail.com"
 
@@ -16,7 +17,7 @@ getSECIndexFile <- function(year, quarter) {
                   year,"/QTR", quarter, "/company.gz")
     # Query webpage with default user agent
     t <- tempfile(fileext = ".gz")
-    GET(url, write_disk(t, overwrite=TRUE), user_agent(ua))
+    result <- try(GET(url, write_disk(t, overwrite=TRUE), user_agent(ua)))
 
     # If we didn't encounter and error downloading the file, parse it
     # and return as a R data frame
@@ -32,9 +33,9 @@ getSECIndexFile <- function(year, quarter) {
                      col_types = "ccicc", skip=10,
                      locale = locale(encoding = "macintosh")) %>%
             mutate(date_filed = as.Date(date_filed))
-        return(temp)
+        temp
     } else {
-        return(NULL)
+        NULL
     }
 }
 
@@ -58,6 +59,8 @@ addIndexFileToDatabase <- function(data) {
 }
 
 deleteIndexDataFromDatabase <- function(pg, year, quarter) {
+    dbExecute(pg, "SET search_path TO edgar")
+
     if(dbExistsTable(pg, "filings")) {
         dbExecute(pg, paste(
             "DELETE
@@ -70,6 +73,7 @@ deleteIndexDataFromDatabase <- function(pg, year, quarter) {
 # Function to delete and then enter updated data for a given year and quarter
 updateData <- function(pg, year, quarter) {
 
+    dbExecute(pg, "SET search_path TO edgar")
     cat("Updating data for ", year, "Q", quarter, "...\n", sep="")
     try({
         deleteIndexDataFromDatabase(pg, year, quarter)
@@ -133,6 +137,7 @@ rs <- dbWriteTable(pg, "index_last_modified_new", index_last_modified_scraped,
 
 # Compare new data with old to identify needed index files ----
 if (dbExistsTable(pg, "index_last_modified")) {
+
     index_last_modified_new <- tbl(pg, "index_last_modified_new")
     index_last_modified <- tbl(pg, "index_last_modified")
 
