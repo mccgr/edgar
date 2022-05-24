@@ -50,7 +50,7 @@ addIndexFileToDatabase <- function(data) {
 
     rs <- dbExecute(pg, "ALTER TABLE filings OWNER TO edgar")
     rs <- dbExecute(pg, "GRANT SELECT ON TABLE filings TO edgar_access")
-    comment <- 'CREATED USING get_filings_full.R/get_filings_incremental.R IN iangow-public/edgar'
+    comment <- 'CREATED USING get_filings.R IN mccgr/edgar'
     db_comment <- paste0("COMMENT ON TABLE filings IS '",
                          comment, " ON ", Sys.time() , "'; ")
     dbExecute(pg, db_comment)
@@ -177,7 +177,7 @@ rs <- dbExecute(pg, "GRANT SELECT ON filings TO edgar_access")
 rs <- dbExecute(pg, "ALTER TABLE index_last_modified OWNER TO edgar")
 rs <- dbExecute(pg, "GRANT SELECT ON index_last_modified TO edgar_access")
 rs <- dbExecute(pg, "DROP TABLE IF EXISTS index_last_modified_new")
-comment <- 'CREATED USING get_filings.R IN iangow-public/edgar'
+comment <- 'CREATED USING get_filings.R IN mccgr/edgar'
 db_comment <- paste0("COMMENT ON TABLE filings IS '",
                      comment, " ON ", Sys.time() , "'")
 rs <- dbExecute(pg, db_comment)
